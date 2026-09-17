@@ -1,0 +1,8 @@
+streamlit
+pandas
+scipy.optimize
+numpy_financial
+plotly.express
+argparse
+json
+os
