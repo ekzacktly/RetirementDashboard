@@ -1,8 +1,8 @@
 streamlit
 pandas
-scipy.optimize
+scipy
 numpy_financial
-plotly.express
+plotly
 argparse
 json
 os
