@@ -3,6 +3,3 @@ pandas
 scipy
 numpy_financial
 plotly
-argparse
-json
-os
