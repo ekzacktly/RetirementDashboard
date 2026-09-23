@@ -33,22 +33,22 @@ config = {
     "state_tax_rate": 3.07,
     "state_exempts_ret": True,
     "local_tax_rate": 1.0,
-    "current_age": 36, "retire_age": 55, "target_lifespan": 95,
+    "current_age": 35, "retire_age": 65, "target_lifespan": 95,
     "pre_ret_return": 7.0, "post_ret_return": 4.0,
-    "target_gross_income": 150000,
+    "target_gross_income": 100000,
     "rmd_start_age": 75, "penalty_age": 60, "penalty_pct": 10.0,
-    "p1_salary": 110000, "p1_annual_raise": 2.0,
-    "p1_trad_401k_start": 325000, "p1_trad_401k_cont": 10.0, "p1_trad_401k_match": 6.0, "p1_trad_401k_flat": 5000,
+    "p1_salary": 70000, "p1_annual_raise": 2.5,
+    "p1_trad_401k_start": 45000, "p1_trad_401k_cont": 6.0, "p1_trad_401k_match": 4.0, "p1_trad_401k_flat": 0,
     "p1_trad_ira_start": 0, "p1_trad_ira_mo": 0,
     "p1_roth_401k_start": 0, "p1_roth_401k_cont": 0.0, "p1_roth_401k_match": 0.0,
-    "p1_roth_ira_start": 0, "p1_roth_ira_mo": 625,
-    "p1_brok_start": 0, "p1_brok_mo": 488,
-    "p2_salary": 100000, "p2_annual_raise": 2.0,
-    "p2_trad_401k_start": 70000, "p2_trad_401k_cont": 10.0, "p2_trad_401k_match": 4.0, "p2_trad_401k_flat": 5000,
+    "p1_roth_ira_start": 5000, "p1_roth_ira_mo": 100,
+    "p1_brok_start": 2000, "p1_brok_mo": 0,
+    "p2_salary": 65000, "p2_annual_raise": 2.5,
+    "p2_trad_401k_start": 35000, "p2_trad_401k_cont": 6.0, "p2_trad_401k_match": 4.0, "p2_trad_401k_flat": 0,
     "p2_trad_ira_start": 0, "p2_trad_ira_mo": 0,
     "p2_roth_401k_start": 0, "p2_roth_401k_cont": 0.0, "p2_roth_401k_match": 0.0,
-    "p2_roth_ira_start": 0, "p2_roth_ira_mo": 625,
-    "p2_brok_start": 0, "p2_brok_mo": 488,
+    "p2_roth_ira_start": 5000, "p2_roth_ira_mo": 100,
+    "p2_brok_start": 2000, "p2_brok_mo": 0,
     "use_glide_path": True, "use_smile_model": True
 }
 
@@ -340,8 +340,8 @@ st.title("Auto-Optimized Retirement Engine")
 if profile_loaded_name:
     st.success(f"✅ Successfully loaded configuration: `{profile_loaded_name}`")
 else:
-    st.warning(
-        "⚠️ No custom profile detected. Using generic default settings. (Upload a 'my_profile.json' in the sidebar).")
+    st.info(
+        "ℹ️ Using standard generic defaults. You can upload a custom `my_profile.json` in the sidebar to load your exact numbers.")
 
 tab1, tab2, tab3 = st.tabs(["📊 Retirement Dashboard", "📖 User Manual & Explainer", "📜 The Financial Story"])
 
@@ -378,13 +378,13 @@ with tab1:
     with col2a:
         p1_salary = st.number_input("Person 1 Salary ($)", value=int(config["p1_salary"]), step=5000,
                                     help="Gross annual salary for Person 1.")
-        p1_annual_raise = st.number_input("P1 Annual Raise (%)", value=float(config.get("p1_annual_raise", 2.0)),
+        p1_annual_raise = st.number_input("P1 Annual Raise (%)", value=float(config.get("p1_annual_raise", 2.5)),
                                           step=0.1,
                                           help="Expected annual percentage increase in wage income for Person 1.") / 100
     with col2b:
         p2_salary = st.number_input("Person 2 Salary ($)", value=int(config["p2_salary"]), step=5000,
                                     disabled=is_single, help="Gross annual salary for Person 2.")
-        p2_annual_raise = st.number_input("P2 Annual Raise (%)", value=float(config.get("p2_annual_raise", 2.0)),
+        p2_annual_raise = st.number_input("P2 Annual Raise (%)", value=float(config.get("p2_annual_raise", 2.5)),
                                           step=0.1, disabled=is_single,
                                           help="Expected annual percentage increase in wage income for Person 2.") / 100
 
@@ -992,7 +992,7 @@ with tab1:
         st.metric("Federal Tax (Retirement Living)", f"${tot_tax_living:,.0f}",
                   help="Cumulative federal income taxes paid on withdrawals used directly to fund your baseline living expenses.")
         st.metric("Federal Cap Gains (Retirement)", f"${tot_tax_brokerage:,.0f}",
-                  help="Cumulative federal long-term capital gains taxes automatically evaluated across progressive 0%, 15%, and 20% IRS brackets.")
+                  help="Cumulative federal long-term capital gains taxes automatically evaluated across progressive IRS brackets.")
     with tax_col2:
         st.metric("State Tax (Retirement)", f"${tot_state_tax_retired:,.0f}",
                   help="Total state income taxes paid on pre-tax distributions and capital gains during the decumulation phase.")
