@@ -33,21 +33,22 @@ config = {
     "state_tax_rate": 3.07,
     "state_exempts_ret": True,
     "local_tax_rate": 1.0,
-    "current_age": 40, "retire_age": 62, "target_lifespan": 95,
-    "pre_ret_return": 7.0, "post_ret_return": 4.0, "annual_salary_raise": 2.0, "rmd_start_age": 75,
-    "p1_salary": 75000,
-    "p1_trad_401k_start": 100000, "p1_trad_401k_cont": 10.0, "p1_trad_401k_match": 6.0, "p1_trad_401k_flat": 0,
+    "current_age": 36, "retire_age": 55, "target_lifespan": 95,
+    "pre_ret_return": 7.0, "post_ret_return": 4.0,
+    "target_gross_income": 150000,
+    "rmd_start_age": 75, "penalty_age": 60, "penalty_pct": 10.0,
+    "p1_salary": 110000, "p1_annual_raise": 2.0,
+    "p1_trad_401k_start": 325000, "p1_trad_401k_cont": 10.0, "p1_trad_401k_match": 6.0, "p1_trad_401k_flat": 5000,
     "p1_trad_ira_start": 0, "p1_trad_ira_mo": 0,
-    "p1_roth_401k_start": 0, "p1_roth_401k_cont": 0.0,
-    "p1_roth_ira_start": 0, "p1_roth_ira_mo": 250,
-    "p1_brok_start": 0, "p1_brok_mo": 250,
-    "p2_salary": 80000,
-    "p2_trad_401k_start": 200000, "p2_trad_401k_cont": 10.0, "p2_trad_401k_match": 5.0, "p2_trad_401k_flat": 0,
+    "p1_roth_401k_start": 0, "p1_roth_401k_cont": 0.0, "p1_roth_401k_match": 0.0,
+    "p1_roth_ira_start": 0, "p1_roth_ira_mo": 625,
+    "p1_brok_start": 0, "p1_brok_mo": 488,
+    "p2_salary": 100000, "p2_annual_raise": 2.0,
+    "p2_trad_401k_start": 70000, "p2_trad_401k_cont": 10.0, "p2_trad_401k_match": 4.0, "p2_trad_401k_flat": 5000,
     "p2_trad_ira_start": 0, "p2_trad_ira_mo": 0,
-    "p2_roth_401k_start": 0, "p2_roth_401k_cont": 0.0,
-    "p2_roth_ira_start": 0, "p2_roth_ira_mo": 325,
-    "p2_brok_start": 0, "p2_brok_mo": 300,
-    "target_gross_income": 100000, "penalty_age": 60, "penalty_pct": 10.0,
+    "p2_roth_401k_start": 0, "p2_roth_401k_cont": 0.0, "p2_roth_401k_match": 0.0,
+    "p2_roth_ira_start": 0, "p2_roth_ira_mo": 625,
+    "p2_brok_start": 0, "p2_brok_mo": 488,
     "use_glide_path": True, "use_smile_model": True
 }
 
@@ -74,7 +75,7 @@ if os.path.exists(profile_path):
         profile_loaded_name = profile_filename
 
 # ==========================================
-# SIDEBAR: HOUSEHOLD, LOCATION & FILE I/O
+# SIDEBAR: HOUSEHOLD, RULES & FILE I/O
 # ==========================================
 st.sidebar.header("📂 Load Custom Profile")
 uploaded_file = st.sidebar.file_uploader(
@@ -111,11 +112,11 @@ if default_state not in US_STATES: default_state = "Pennsylvania"
 state_choice = st.sidebar.selectbox(
     "State of Residence",
     US_STATES,
-    index=US_STATES.index(default_state)
+    index=US_STATES.index(default_state),
+    help="Determines the specific state income tax rules applied to your wages and retirement distributions."
 )
 
 if state_choice in ZERO_TAX_STATES:
-    st.sidebar.info(f"**{state_choice}** is a zero-income-tax state.")
     state_tax_rate = 0.0
     state_exempts_ret = True
     local_tax_rate = 0.0
@@ -127,26 +128,49 @@ else:
         default_rate = float(config.get("state_tax_rate", 5.0))
         default_exempt = bool(config.get("state_exempts_ret", False))
 
-    state_tax_rate = st.sidebar.number_input(
-        "Effective State Income Tax (%)",
-        value=default_rate,
-        step=0.1,
-        help="Flat or effective progressive tax rate applied to state taxable income."
-    )
-    state_exempts_ret = st.sidebar.checkbox(
-        "State Exempts Retirement Income",
-        value=default_exempt,
-        help="If checked, distributions from Pre-Tax 401(k)s and IRAs are completely exempt from state income tax."
-    )
-    local_tax_rate = st.sidebar.number_input(
-        "Local Earned Income Tax (EIT) (%)",
-        value=float(config.get("local_tax_rate", 1.0)),
-        step=0.1,
-        help="Local municipality tax applied exclusively to working wages (W-2 income). Does not apply to retirement draws."
-    )
+    state_tax_rate = st.sidebar.number_input("Effective State Income Tax (%)", value=default_rate, step=0.1,
+                                             help="Flat or effective progressive tax rate applied to state taxable income.")
+    state_exempts_ret = st.sidebar.checkbox("State Exempts Retirement Income", value=default_exempt,
+                                            help="If checked, distributions from Pre-Tax 401(k)s and IRAs are completely exempt from state income tax.")
+    local_tax_rate = st.sidebar.number_input("Local Earned Income Tax (EIT) (%)",
+                                             value=float(config.get("local_tax_rate", 1.0)), step=0.1,
+                                             help="Local municipality tax applied exclusively to working wages (W-2 income).")
 
 state_tax_decimal = state_tax_rate / 100
 local_tax_decimal = local_tax_rate / 100
+
+st.sidebar.markdown("---")
+st.sidebar.header("⚙️ Engine Rules & Constraints")
+
+rmd_start_age = st.sidebar.number_input(
+    "RMD Start Age",
+    value=int(config.get("rmd_start_age", 75)),
+    step=1,
+    help="Age when mandatory IRS distributions start from pre-tax accounts (Currently age 75 per SECURE 2.0)."
+)
+penalty_age = st.sidebar.number_input(
+    "Early Withdrawal Penalty Age",
+    value=int(config.get("penalty_age", 60)),
+    step=1,
+    help="Age when the 10% IRS early withdrawal penalty drops off (Typically 59.5, rounded to 60)."
+)
+penalty_pct = st.sidebar.number_input(
+    "Early Withdrawal Penalty (%)",
+    value=float(config.get("penalty_pct", 10.0)),
+    step=1.0,
+    help="Statutory excise tax rate assessed by the IRS on early distributions."
+) / 100
+
+use_glide_path = st.sidebar.checkbox(
+    "Use Glide Path for Returns",
+    value=bool(config.get("use_glide_path", True)),
+    help="Smoothly transitions returns from the pre-retirement rate down to the post-retirement rate over a 32-year curve."
+)
+use_smile_model = st.sidebar.checkbox(
+    "Use Retirement Spending Smile",
+    value=bool(config.get("use_smile_model", True)),
+    help="Modulates annual spending through Go-Go, Slow-Go, and Care phases to model real-world spending declines."
+)
 
 
 # ==========================================
@@ -168,36 +192,27 @@ def calc_mfj_tax(gross, is_penalized=False, penalty_pct=0.10):
 
 
 def calc_mfj_cg_tax(gains, ordinary_gross):
-    """
-    Dynamically stacks capital gains on top of ordinary income to evaluate against
-    progressive 0%, 15%, and 20% IRS long-term capital gains brackets.
-    """
     sd = 32200
     ord_taxable = max(0, ordinary_gross - sd)
     rem_sd = max(0, sd - ordinary_gross)
-
     taxable_gains = max(0, gains - rem_sd)
     if taxable_gains <= 0: return 0.0
 
     b0_limit = 94050
     b15_limit = 583750
-
     tax = 0.0
 
-    # Fill 0% Bracket
     space_0 = max(0, b0_limit - ord_taxable)
     gain_0 = min(taxable_gains, space_0)
     rem_gains = taxable_gains - gain_0
     if rem_gains <= 0: return tax
 
-    # Fill 15% Bracket
     space_15 = max(0, b15_limit - max(ord_taxable, b0_limit))
     gain_15 = min(rem_gains, space_15)
     tax += gain_15 * 0.15
     rem_gains -= gain_15
     if rem_gains <= 0: return tax
 
-    # Spill into 20% Bracket
     tax += rem_gains * 0.20
     return tax
 
@@ -331,278 +346,155 @@ else:
 tab1, tab2, tab3 = st.tabs(["📊 Retirement Dashboard", "📖 User Manual & Explainer", "📜 The Financial Story"])
 
 with tab1:
-    col1, col2, col3, col4 = st.columns(4)
+    st.header("1. Macro Assumptions & Goals")
+    mac1, mac2, mac3, mac4, mac5, mac6 = st.columns(6)
+    with mac1:
+        current_age = st.number_input("Current Age", value=int(config["current_age"]), step=1,
+                                      help="Current age of the primary earner for timeline tracking.")
+    with mac2:
+        retire_age = st.number_input("Retirement Age", value=int(config["retire_age"]), step=1,
+                                     help="Age when you stop working and begin drawing from your portfolio.")
+    with mac3:
+        target_lifespan = st.number_input("Target Lifespan", value=int(config["target_lifespan"]), step=1,
+                                          help="Terminal simulation age where balances are evaluated for depletion or preservation.")
+    with mac4:
+        pre_ret_return = st.number_input("Pre-Ret Return (%)", value=float(config["pre_ret_return"]), step=0.1,
+                                         help="Expected annual investment return before retirement (net of annual dividend drag).") / 100
+    with mac5:
+        post_ret_return = st.number_input("Post-Ret Return (%)", value=float(config["post_ret_return"]), step=0.1,
+                                          help="Expected annual investment return during retirement decumulation.") / 100
+    with mac6:
+        target_gross_income = st.number_input("Target Gross Ret. Spend ($)", value=int(config["target_gross_income"]),
+                                              step=5000,
+                                              help="Target gross annual retirement spending. The model solves for the net cash this produces after ordinary taxes.")
 
-    with col1:
-        st.header("1. Macro Assumptions")
+    st.markdown("---")
 
-        current_age = st.number_input(
-            "Current Age",
-            value=int(config["current_age"]),
-            step=1,
-            help="Current age of the primary earner for timeline tracking."
-        )
-        retire_age = st.number_input(
-            "Retirement Age",
-            value=int(config["retire_age"]),
-            step=1,
-            help="Age when you stop working and begin drawing from your portfolio."
-        )
-        target_lifespan = st.number_input(
-            "Target Lifespan Age",
-            value=int(config["target_lifespan"]),
-            step=1,
-            help="Terminal simulation age where balances are evaluated for depletion or preservation."
-        )
-        pre_ret_return = st.number_input(
-            "Pre-Retirement Return (%)",
-            value=float(config["pre_ret_return"]),
-            step=0.1,
-            help="Expected annual investment return before retirement (net of annual dividend drag in taxable accounts)."
-        ) / 100
-        post_ret_return = st.number_input(
-            "Post-Retirement Return (%)",
-            value=float(config["post_ret_return"]),
-            step=0.1,
-            help="Expected annual investment return during retirement decumulation."
-        ) / 100
-        annual_salary_raise = st.number_input(
-            "Annual Salary Raise (%)",
-            value=float(config["annual_salary_raise"]),
-            step=0.1,
-            help="Expected annual percentage increase in wage income to reflect merit raises and cost-of-living adjustments."
-        ) / 100
-        rmd_start_age = st.number_input(
-            "RMD Start Age",
-            value=int(config["rmd_start_age"]),
-            step=1,
-            help="Age when mandatory IRS distributions start from pre-tax accounts (currently age 75 per SECURE 2.0)."
-        )
+    # ----------------------------------------
+    # SECTION 2: Income & Salaries
+    # ----------------------------------------
+    st.header("2. Base Salaries")
+    col2a, col2b = st.columns(2)
+    with col2a:
+        p1_salary = st.number_input("Person 1 Salary ($)", value=int(config["p1_salary"]), step=5000,
+                                    help="Gross annual salary for Person 1.")
+        p1_annual_raise = st.number_input("P1 Annual Raise (%)", value=float(config.get("p1_annual_raise", 2.0)),
+                                          step=0.1,
+                                          help="Expected annual percentage increase in wage income for Person 1.") / 100
+    with col2b:
+        p2_salary = st.number_input("Person 2 Salary ($)", value=int(config["p2_salary"]), step=5000,
+                                    disabled=is_single, help="Gross annual salary for Person 2.")
+        p2_annual_raise = st.number_input("P2 Annual Raise (%)", value=float(config.get("p2_annual_raise", 2.0)),
+                                          step=0.1, disabled=is_single,
+                                          help="Expected annual percentage increase in wage income for Person 2.") / 100
 
-    with col2:
-        st.header("2. Person 1 Portfolio")
-        p1_salary = st.number_input(
-            "P1 Current Salary",
-            value=int(config["p1_salary"]),
-            step=5000,
-            help="Gross annual salary for Person 1 before tax deductions and employee deferrals."
-        )
+    st.markdown("<br>", unsafe_allow_html=True)
 
-        st.markdown("**Pre-Tax Accounts**")
-        p1_trad_401k_start = st.number_input(
-            "P1 Trad 401(k) Start Bal",
-            value=int(config["p1_trad_401k_start"]),
-            step=10000,
-            help="Current balance in Person 1's Traditional Pre-Tax 401(k)."
-        )
-        p1_trad_401k_cont = st.number_input(
-            "P1 Trad 401(k) Contrib (%)",
-            value=float(config["p1_trad_401k_cont"]),
-            step=1.0,
-            help="Percentage of Person 1's salary contributed to their Pre-Tax Traditional 401(k)."
-        ) / 100
-        p1_trad_401k_match = st.number_input(
-            "P1 401(k) Match (%)",
-            value=float(config["p1_trad_401k_match"]),
-            step=1.0,
-            help="Employer matching percentage on Person 1's Traditional 401(k) contributions."
-        ) / 100
-        p1_trad_401k_flat = st.number_input(
-            "P1 401(k) Flat/Bonus",
-            value=int(config["p1_trad_401k_flat"]),
-            step=1000,
-            help="Fixed annual non-elective employer contribution or profit sharing deposited into Person 1's 401(k)."
-        )
-        p1_trad_ira_start = st.number_input(
-            "P1 Trad IRA Start Bal",
-            value=int(config["p1_trad_ira_start"]),
-            step=5000,
-            help="Current balance in Person 1's Traditional Pre-Tax IRA."
-        )
-        p1_trad_ira_mo = st.number_input(
-            "P1 Trad IRA Monthly ($)",
-            value=int(config["p1_trad_ira_mo"]),
-            step=100,
-            help="Fixed monthly out-of-pocket contribution to Person 1's Traditional IRA."
-        )
+    # ----------------------------------------
+    # SECTION 3: Pre-Tax Accounts
+    # ----------------------------------------
+    st.header("3. Pre-Tax Accounts (Traditional 401k & IRA)")
+    col3a, col3b = st.columns(2)
+    with col3a:
+        st.subheader("Person 1")
+        p1_trad_401k_start = st.number_input("P1 Trad 401(k) Start Bal", value=int(config["p1_trad_401k_start"]),
+                                             step=10000,
+                                             help="Current balance in Person 1's Traditional Pre-Tax 401(k).")
+        p1_trad_401k_cont = st.number_input("P1 Trad 401(k) Contrib (%)", value=float(config["p1_trad_401k_cont"]),
+                                            step=1.0,
+                                            help="Percentage of Person 1's salary contributed to their Pre-Tax 401(k).") / 100
+        p1_trad_401k_match = st.number_input("P1 Trad 401(k) Match (%)", value=float(config["p1_trad_401k_match"]),
+                                             step=1.0,
+                                             help="Employer matching percentage deposited as Pre-Tax Traditional.") / 100
+        p1_trad_401k_flat = st.number_input("P1 401(k) Flat Bonus/Yr ($)", value=int(config["p1_trad_401k_flat"]),
+                                            step=1000,
+                                            help="Fixed annual non-elective employer contribution or profit sharing.")
+        p1_trad_ira_start = st.number_input("P1 Trad IRA Start Bal", value=int(config["p1_trad_ira_start"]), step=5000,
+                                            help="Current balance in Person 1's Traditional IRA.")
+        p1_trad_ira_mo = st.number_input("P1 Trad IRA Monthly ($)", value=int(config["p1_trad_ira_mo"]), step=100,
+                                         help="Fixed monthly out-of-pocket contribution to Person 1's Traditional IRA.")
+    with col3b:
+        st.subheader("Person 2")
+        p2_trad_401k_start = st.number_input("P2 Trad 401(k) Start Bal", value=int(config["p2_trad_401k_start"]),
+                                             step=10000, disabled=is_single,
+                                             help="Current balance in Person 2's Traditional Pre-Tax 401(k).")
+        p2_trad_401k_cont = st.number_input("P2 Trad 401(k) Contrib (%)", value=float(config["p2_trad_401k_cont"]),
+                                            step=1.0, disabled=is_single,
+                                            help="Percentage of Person 2's salary contributed to their Pre-Tax 401(k).") / 100
+        p2_trad_401k_match = st.number_input("P2 Trad 401(k) Match (%)", value=float(config["p2_trad_401k_match"]),
+                                             step=1.0, disabled=is_single,
+                                             help="Employer matching percentage deposited as Pre-Tax Traditional.") / 100
+        p2_trad_401k_flat = st.number_input("P2 401(k) Flat Bonus/Yr ($)", value=int(config["p2_trad_401k_flat"]),
+                                            step=1000, disabled=is_single,
+                                            help="Fixed annual non-elective employer contribution or profit sharing.")
+        p2_trad_ira_start = st.number_input("P2 Trad IRA Start Bal", value=int(config["p2_trad_ira_start"]), step=5000,
+                                            disabled=is_single, help="Current balance in Person 2's Traditional IRA.")
+        p2_trad_ira_mo = st.number_input("P2 Trad IRA Monthly ($)", value=int(config["p2_trad_ira_mo"]), step=100,
+                                         disabled=is_single,
+                                         help="Fixed monthly out-of-pocket contribution to Person 2's Traditional IRA.")
 
-        st.markdown("**Post-Tax Accounts**")
-        p1_roth_401k_start = st.number_input(
-            "P1 Roth 401(k) Start Bal",
-            value=int(config["p1_roth_401k_start"]),
-            step=5000,
-            help="Current balance in Person 1's designated Roth 401(k)."
-        )
-        p1_roth_401k_cont = st.number_input(
-            "P1 Roth 401(k) Contrib (%)",
-            value=float(config["p1_roth_401k_cont"]),
-            step=1.0,
-            help="Percentage of Person 1's salary contributed to their Roth 401(k)."
-        ) / 100
-        p1_roth_ira_start = st.number_input(
-            "P1 Roth IRA Start Bal",
-            value=int(config["p1_roth_ira_start"]),
-            step=5000,
-            help="Current balance in Person 1's Roth IRA."
-        )
-        p1_roth_ira_mo = st.number_input(
-            "P1 Roth IRA Monthly ($)",
-            value=int(config["p1_roth_ira_mo"]),
-            step=100,
-            help="Fixed monthly contribution to Person 1's Roth IRA (subject to annual IRS limits)."
-        )
+    st.markdown("<br>", unsafe_allow_html=True)
 
-        st.markdown("**Taxable Accounts**")
-        p1_brok_start = st.number_input(
-            "P1 Brokerage Start Bal",
-            value=int(config["p1_brok_start"]),
-            step=5000,
-            help="Current balance in Person 1's Non-Qualified Taxable Brokerage account."
-        )
-        p1_brok_mo = st.number_input(
-            "P1 Brokerage Monthly ($)",
-            value=int(config["p1_brok_mo"]),
-            step=100,
-            help="Monthly post-tax contribution to Person 1's Taxable Brokerage account."
-        )
+    # ----------------------------------------
+    # SECTION 4: Post-Tax Accounts
+    # ----------------------------------------
+    st.header("4. Post-Tax Accounts (Roth 401k & IRA)")
+    col4a, col4b = st.columns(2)
+    with col4a:
+        st.subheader("Person 1")
+        p1_roth_401k_start = st.number_input("P1 Roth 401(k) Start Bal", value=int(config["p1_roth_401k_start"]),
+                                             step=5000, help="Current balance in Person 1's designated Roth 401(k).")
+        p1_roth_401k_cont = st.number_input("P1 Roth 401(k) Contrib (%)", value=float(config["p1_roth_401k_cont"]),
+                                            step=1.0,
+                                            help="Percentage of Person 1's salary contributed to their Roth 401(k).") / 100
+        p1_roth_401k_match = st.number_input("P1 Roth 401(k) Match (%)",
+                                             value=float(config.get("p1_roth_401k_match", 0.0)), step=1.0,
+                                             help="Employer matching percentage legally deposited as Roth (per SECURE 2.0).") / 100
+        p1_roth_ira_start = st.number_input("P1 Roth IRA Start Bal", value=int(config["p1_roth_ira_start"]), step=5000,
+                                            help="Current balance in Person 1's Roth IRA.")
+        p1_roth_ira_mo = st.number_input("P1 Roth IRA Monthly ($)", value=int(config["p1_roth_ira_mo"]), step=100,
+                                         help="Fixed monthly contribution to Person 1's Roth IRA (subject to annual IRS limits).")
+    with col4b:
+        st.subheader("Person 2")
+        p2_roth_401k_start = st.number_input("P2 Roth 401(k) Start Bal", value=int(config["p2_roth_401k_start"]),
+                                             step=5000, disabled=is_single,
+                                             help="Current balance in Person 2's designated Roth 401(k).")
+        p2_roth_401k_cont = st.number_input("P2 Roth 401(k) Contrib (%)", value=float(config["p2_roth_401k_cont"]),
+                                            step=1.0, disabled=is_single,
+                                            help="Percentage of Person 2's salary contributed to their Roth 401(k).") / 100
+        p2_roth_401k_match = st.number_input("P2 Roth 401(k) Match (%)",
+                                             value=float(config.get("p2_roth_401k_match", 0.0)), step=1.0,
+                                             disabled=is_single,
+                                             help="Employer matching percentage legally deposited as Roth (per SECURE 2.0).") / 100
+        p2_roth_ira_start = st.number_input("P2 Roth IRA Start Bal", value=int(config["p2_roth_ira_start"]), step=5000,
+                                            disabled=is_single, help="Current balance in Person 2's Roth IRA.")
+        p2_roth_ira_mo = st.number_input("P2 Roth IRA Monthly ($)", value=int(config["p2_roth_ira_mo"]), step=100,
+                                         disabled=is_single, help="Fixed monthly contribution to Person 2's Roth IRA.")
 
-    with col3:
-        st.header("3. Person 2 Portfolio")
-        p2_salary = st.number_input(
-            "P2 Current Salary",
-            value=int(config["p2_salary"]),
-            step=5000,
-            disabled=is_single,
-            help="Gross annual salary for Person 2 before tax deductions and employee deferrals."
-        )
+    st.markdown("<br>", unsafe_allow_html=True)
 
-        st.markdown("**Pre-Tax Accounts**")
-        p2_trad_401k_start = st.number_input(
-            "P2 Trad 401(k) Start Bal",
-            value=int(config["p2_trad_401k_start"]),
-            step=10000,
-            disabled=is_single,
-            help="Current balance in Person 2's Traditional Pre-Tax 401(k)."
-        )
-        p2_trad_401k_cont = st.number_input(
-            "P2 Trad 401(k) Contrib (%)",
-            value=float(config["p2_trad_401k_cont"]),
-            step=1.0,
-            disabled=is_single,
-            help="Percentage of Person 2's salary contributed to their Pre-Tax Traditional 401(k)."
-        ) / 100
-        p2_trad_401k_match = st.number_input(
-            "P2 401(k) Match (%)",
-            value=float(config["p2_trad_401k_match"]),
-            step=1.0,
-            disabled=is_single,
-            help="Employer matching percentage on Person 2's Traditional 401(k) contributions."
-        ) / 100
-        p2_trad_401k_flat = st.number_input(
-            "P2 401(k) Flat/Bonus",
-            value=int(config["p2_trad_401k_flat"]),
-            step=1000,
-            disabled=is_single,
-            help="Fixed annual non-elective employer contribution or profit sharing deposited into Person 2's 401(k)."
-        )
-        p2_trad_ira_start = st.number_input(
-            "P2 Trad IRA Start Bal",
-            value=int(config["p2_trad_ira_start"]),
-            step=5000,
-            disabled=is_single,
-            help="Current balance in Person 2's Traditional Pre-Tax IRA."
-        )
-        p2_trad_ira_mo = st.number_input(
-            "P2 Trad IRA Monthly ($)",
-            value=int(config["p2_trad_ira_mo"]),
-            step=100,
-            disabled=is_single,
-            help="Fixed monthly out-of-pocket contribution to Person 2's Traditional IRA."
-        )
-
-        st.markdown("**Post-Tax Accounts**")
-        p2_roth_401k_start = st.number_input(
-            "P2 Roth 401(k) Start Bal",
-            value=int(config["p2_roth_401k_start"]),
-            step=5000,
-            disabled=is_single,
-            help="Current balance in Person 2's designated Roth 401(k)."
-        )
-        p2_roth_401k_cont = st.number_input(
-            "P2 Roth 401(k) Contrib (%)",
-            value=float(config["p2_roth_401k_cont"]),
-            step=1.0,
-            disabled=is_single,
-            help="Percentage of Person 2's salary contributed to their Roth 401(k)."
-        ) / 100
-        p2_roth_ira_start = st.number_input(
-            "P2 Roth IRA Start Bal",
-            value=int(config["p2_roth_ira_start"]),
-            step=5000,
-            disabled=is_single,
-            help="Current balance in Person 2's Roth IRA."
-        )
-        p2_roth_ira_mo = st.number_input(
-            "P2 Roth IRA Monthly ($)",
-            value=int(config["p2_roth_ira_mo"]),
-            step=100,
-            disabled=is_single,
-            help="Fixed monthly contribution to Person 2's Roth IRA (subject to annual IRS limits)."
-        )
-
-        st.markdown("**Taxable Accounts**")
-        p2_brok_start = st.number_input(
-            "P2 Brokerage Start Bal",
-            value=int(config["p2_brok_start"]),
-            step=5000,
-            disabled=is_single,
-            help="Current balance in Person 2's Non-Qualified Taxable Brokerage account."
-        )
-        p2_brok_mo = st.number_input(
-            "P2 Brokerage Monthly ($)",
-            value=int(config["p2_brok_mo"]),
-            step=100,
-            disabled=is_single,
-            help="Monthly post-tax contribution to Person 2's Taxable Brokerage account."
-        )
-
-    with col4:
-        st.header("4. Strategy & Settings")
-        target_gross_income = st.number_input(
-            "Desired Pre-Tax Ret. Income",
-            value=int(config["target_gross_income"]),
-            step=5000,
-            help="Target gross annual retirement spending. The model solves for the net living cash produced by this amount after federal ordinary taxes."
-        )
-        penalty_age = st.number_input(
-            "Early Withdrawal Penalty Age",
-            value=int(config["penalty_age"]),
-            step=1,
-            help="Age when the 10% IRS early withdrawal penalty on pre-tax distributions drops off (typically age 59.5, rounded to 60)."
-        )
-        penalty_pct = st.number_input(
-            "Early Withdrawal Penalty (%)",
-            value=float(config["penalty_pct"]),
-            step=1.0,
-            help="Statutory excise tax rate assessed by the IRS on early distributions from pre-tax retirement accounts (default: 10%)."
-        ) / 100
-
-        st.info(
-            "💡 **Federal Capital Gains** are automatically calculated using the progressive IRS brackets (0%, 15%, 20%) directly stacked on top of your ordinary income.")
-
-        st.markdown("### Algorithm Toggles")
-        use_glide_path = st.checkbox(
-            "Use Glide Path for Returns",
-            value=bool(config["use_glide_path"]),
-            help="Smoothly transitions portfolio returns from the pre-retirement return down to the post-retirement return over a 32-year curve."
-        )
-        use_smile_model = st.checkbox(
-            "Use Retirement Spending Smile",
-            value=bool(config["use_smile_model"]),
-            help="Modulates annual spending through retirement phases: Go-Go (100%), Slow-Go (down to 80%), and Care/Healthcare curl (back to 90%)."
-        )
+    # ----------------------------------------
+    # SECTION 5: Taxable Accounts
+    # ----------------------------------------
+    st.header("5. Taxable Accounts (Brokerage)")
+    col5a, col5b = st.columns(2)
+    with col5a:
+        st.subheader("Person 1")
+        p1_brok_start = st.number_input("P1 Brokerage Start Bal", value=int(config["p1_brok_start"]), step=5000,
+                                        help="Current balance in Person 1's Non-Qualified Taxable Brokerage account.")
+        p1_brok_mo = st.number_input("P1 Brokerage Monthly ($)", value=int(config["p1_brok_mo"]), step=100,
+                                     help="Monthly post-tax contribution to Person 1's Taxable Brokerage.")
+    with col5b:
+        st.subheader("Person 2")
+        p2_brok_start = st.number_input("P2 Brokerage Start Bal", value=int(config["p2_brok_start"]), step=5000,
+                                        disabled=is_single,
+                                        help="Current balance in Person 2's Non-Qualified Taxable Brokerage account.")
+        p2_brok_mo = st.number_input("P2 Brokerage Monthly ($)", value=int(config["p2_brok_mo"]), step=100,
+                                     disabled=is_single,
+                                     help="Monthly post-tax contribution to Person 2's Taxable Brokerage.")
 
     raw_p2_salary = p2_salary
+    raw_p2_annual_raise = p2_annual_raise
     raw_p2_trad_401k_start = p2_trad_401k_start;
     raw_p2_trad_401k_cont = p2_trad_401k_cont
     raw_p2_trad_401k_match = p2_trad_401k_match;
@@ -610,7 +502,8 @@ with tab1:
     raw_p2_trad_ira_start = p2_trad_ira_start;
     raw_p2_trad_ira_mo = p2_trad_ira_mo
     raw_p2_roth_401k_start = p2_roth_401k_start;
-    raw_p2_roth_401k_cont = p2_roth_401k_cont
+    raw_p2_roth_401k_cont = p2_roth_401k_cont;
+    raw_p2_roth_401k_match = p2_roth_401k_match
     raw_p2_roth_ira_start = p2_roth_ira_start;
     raw_p2_roth_ira_mo = p2_roth_ira_mo
     raw_p2_brok_start = p2_brok_start;
@@ -618,6 +511,7 @@ with tab1:
 
     if is_single:
         p2_salary = 0
+        p2_annual_raise = 0.0
         p2_trad_401k_start = 0;
         p2_trad_401k_cont = 0.0;
         p2_trad_401k_match = 0.0;
@@ -625,7 +519,8 @@ with tab1:
         p2_trad_ira_start = 0;
         p2_trad_ira_mo = 0
         p2_roth_401k_start = 0;
-        p2_roth_401k_cont = 0.0
+        p2_roth_401k_cont = 0.0;
+        p2_roth_401k_match = 0.0
         p2_roth_ira_start = 0;
         p2_roth_ira_mo = 0
         p2_brok_start = 0;
@@ -645,9 +540,9 @@ with tab1:
         "target_lifespan": target_lifespan,
         "pre_ret_return": round(pre_ret_return * 100, 2),
         "post_ret_return": round(post_ret_return * 100, 2),
-        "annual_salary_raise": round(annual_salary_raise * 100, 2),
         "rmd_start_age": rmd_start_age,
         "p1_salary": p1_salary,
+        "p1_annual_raise": round(p1_annual_raise * 100, 2),
         "p1_trad_401k_start": p1_trad_401k_start,
         "p1_trad_401k_cont": round(p1_trad_401k_cont * 100, 2),
         "p1_trad_401k_match": round(p1_trad_401k_match * 100, 2),
@@ -656,11 +551,13 @@ with tab1:
         "p1_trad_ira_mo": p1_trad_ira_mo,
         "p1_roth_401k_start": p1_roth_401k_start,
         "p1_roth_401k_cont": round(p1_roth_401k_cont * 100, 2),
+        "p1_roth_401k_match": round(p1_roth_401k_match * 100, 2),
         "p1_roth_ira_start": p1_roth_ira_start,
         "p1_roth_ira_mo": p1_roth_ira_mo,
         "p1_brok_start": p1_brok_start,
         "p1_brok_mo": p1_brok_mo,
         "p2_salary": raw_p2_salary,
+        "p2_annual_raise": round(raw_p2_annual_raise * 100, 2),
         "p2_trad_401k_start": raw_p2_trad_401k_start,
         "p2_trad_401k_cont": round(raw_p2_trad_401k_cont * 100, 2),
         "p2_trad_401k_match": round(raw_p2_trad_401k_match * 100, 2),
@@ -669,6 +566,7 @@ with tab1:
         "p2_trad_ira_mo": raw_p2_trad_ira_mo,
         "p2_roth_401k_start": raw_p2_roth_401k_start,
         "p2_roth_401k_cont": round(raw_p2_roth_401k_cont * 100, 2),
+        "p2_roth_401k_match": round(raw_p2_roth_401k_match * 100, 2),
         "p2_roth_ira_start": raw_p2_roth_ira_start,
         "p2_roth_ira_mo": raw_p2_roth_ira_mo,
         "p2_brok_start": raw_p2_brok_start,
@@ -711,10 +609,9 @@ with tab1:
 
         tot_penalties = tot_roth_conv_net = tot_rmd_overflow_net = 0
         tot_tax_living = tot_tax_roth = tot_tax_rmd = tot_tax_brokerage = portfolio_at_retire = 0
-
-        tot_state_tax_working = 0
         tot_state_tax_retired = 0
 
+        retire_balances_dict = {}
         depletion_age = None
         ending_bal = 0
 
@@ -737,6 +634,14 @@ with tab1:
 
             if age == retire_age or (age == current_age and current_age >= retire_age):
                 portfolio_at_retire = trad_bal_tot + roth_bal_tot + brok_bal_tot
+                retire_balances_dict = {
+                    "P1 Pre-Tax": p1_trad_bal,
+                    "P2 Pre-Tax": p2_trad_bal,
+                    "P1 Post-Tax (Roth)": p1_roth_bal,
+                    "P2 Post-Tax (Roth)": p2_roth_bal,
+                    "P1 Brokerage": p1_brok_bal,
+                    "P2 Brokerage": p2_brok_bal
+                }
 
             current_return = get_glide_return(age, retire_age, pre_ret_return, post_ret_return) if use_glide_path else (
                 pre_ret_return if not is_retired else post_ret_return)
@@ -744,12 +649,21 @@ with tab1:
             current_spend = get_smile_spending(age, base_net_spend) if use_smile_model and is_retired else (
                 base_net_spend if is_retired else 0)
 
-            gross_trad = tax = 0
+            # Year tracking variables for detailed table cash flows
+            fed_tax_paid_yr = 0
+            state_tax_paid_yr = 0
+            cg_tax_paid_yr = 0
+            penalty_paid_yr = 0
+            rmd_amt_yr = 0
+
+            pre_tax_in_yr = 0
+            pre_tax_out_yr = 0
+            roth_in_yr = 0
+            roth_out_yr = 0
+            brok_in_yr = 0
+            brok_out_yr = 0
 
             if not is_retired:
-                annual_salt_wage = (curr_p1_sal + curr_p2_sal) * (state_tax_decimal + local_tax_decimal)
-                tot_state_tax_working += annual_salt_wage
-
                 p1_trad_in = (curr_p1_sal * p1_trad_401k_cont) + (
                             curr_p1_sal * p1_trad_401k_match) + p1_trad_401k_flat + (p1_trad_ira_mo * 12)
                 p2_trad_in = (curr_p2_sal * p2_trad_401k_cont) + (
@@ -758,8 +672,10 @@ with tab1:
                 p1_trad_bal = (p1_trad_bal + p1_trad_in) * (1 + current_return)
                 p2_trad_bal = (p2_trad_bal + p2_trad_in) * (1 + current_return)
 
-                p1_roth_in = (curr_p1_sal * p1_roth_401k_cont) + (p1_roth_ira_mo * 12)
-                p2_roth_in = (curr_p2_sal * p2_roth_401k_cont) + (p2_roth_ira_mo * 12)
+                p1_roth_in = (curr_p1_sal * p1_roth_401k_cont) + (curr_p1_sal * p1_roth_401k_match) + (
+                            p1_roth_ira_mo * 12)
+                p2_roth_in = (curr_p2_sal * p2_roth_401k_cont) + (curr_p2_sal * p2_roth_401k_match) + (
+                            p2_roth_ira_mo * 12)
 
                 p1_roth_bal = (p1_roth_bal + p1_roth_in) * (1 + current_return)
                 p2_roth_bal = (p2_roth_bal + p2_roth_in) * (1 + current_return)
@@ -771,8 +687,12 @@ with tab1:
                 p2_brok_bal = (p2_brok_bal + p2_brok_in) * (1 + current_return)
                 p2_brok_basis += p2_brok_in
 
-                curr_p1_sal *= (1 + annual_salary_raise)
-                curr_p2_sal *= (1 + annual_salary_raise)
+                pre_tax_in_yr = p1_trad_in + p2_trad_in
+                roth_in_yr = p1_roth_in + p2_roth_in
+                brok_in_yr = p1_brok_in + p2_brok_in
+
+                curr_p1_sal *= (1 + p1_annual_raise)
+                curr_p2_sal *= (1 + p2_annual_raise)
 
                 status_label = "Working"
 
@@ -784,6 +704,8 @@ with tab1:
                 p2_roth_bal -= r2
                 shortfall -= take_roth
 
+                roth_out_yr = take_roth
+
                 if shortfall > 0:
                     ordinary_gross = 0
                     net_brok_drawn, brok_tax_fed, brok_tax_state, p1_brok_bal, p1_brok_basis, p2_brok_bal, p2_brok_basis = withdraw_from_dual_brokerage_dynamic(
@@ -791,7 +713,10 @@ with tab1:
                         state_tax_decimal, allow_negative_brokerage)
                     shortfall -= net_brok_drawn
 
-                    tax += (brok_tax_fed + brok_tax_state)
+                    brok_out_yr = net_brok_drawn + brok_tax_fed + brok_tax_state
+                    cg_tax_paid_yr += brok_tax_fed
+                    state_tax_paid_yr += brok_tax_state
+
                     tot_tax_brokerage += brok_tax_fed
                     tot_state_tax_retired += brok_tax_state
 
@@ -807,10 +732,12 @@ with tab1:
                     trad_tax_fed = calc_mfj_tax(take_trad, is_penalized=True, penalty_pct=penalty_pct)
                     trad_tax_state = 0 if state_exempts_ret else (take_trad * state_tax_decimal)
 
-                    gross_trad = take_trad
-                    tax += (trad_tax_fed + trad_tax_state)
+                    pre_tax_out_yr = take_trad
+                    fed_tax_paid_yr += trad_tax_fed
+                    state_tax_paid_yr += trad_tax_state
+                    penalty_paid_yr = take_trad * penalty_pct
 
-                    tot_penalties += (take_trad * penalty_pct)
+                    tot_penalties += penalty_paid_yr
                     tot_tax_living += trad_tax_fed
                     tot_state_tax_retired += trad_tax_state
 
@@ -830,15 +757,18 @@ with tab1:
                 rmd = 0
                 if age >= rmd_start_age and trad_bal_tot > 0:
                     rmd = trad_bal_tot / get_rmd_divisor(age)
+                    rmd_amt_yr = rmd
 
                 gross_need = get_gross_for_net(current_spend, state_tax_decimal, state_exempts_ret, is_penalized=False)
                 gross_trad = min(trad_bal_tot, max(rmd, pmt, gross_need))
+                pre_tax_out_yr = gross_trad
 
                 trad_tax_fed = calc_mfj_tax(gross_trad, is_penalized=False)
                 trad_tax_state = 0 if state_exempts_ret else (gross_trad * state_tax_decimal)
 
-                tax += (trad_tax_fed + trad_tax_state)
                 net_trad = gross_trad - (trad_tax_fed + trad_tax_state)
+                fed_tax_paid_yr += trad_tax_fed
+                state_tax_paid_yr += trad_tax_state
 
                 t1, t2 = withdraw_proportional(gross_trad, p1_trad_bal, p2_trad_bal)
                 p1_trad_bal -= t1;
@@ -855,6 +785,7 @@ with tab1:
                     if age < rmd_start_age:
                         p1_roth_bal += surplus / 2;
                         p2_roth_bal += surplus / 2
+                        roth_in_yr = surplus
                         tot_roth_conv_net += surplus
                         tot_tax_roth += trad_tax_fed * ratio_surplus
                     else:
@@ -865,6 +796,7 @@ with tab1:
                         p2_brok_bal += surplus * (1 - p1_ratio)
                         p2_brok_basis += surplus * (1 - p1_ratio)
 
+                        brok_in_yr = surplus
                         tot_rmd_overflow_net += surplus
                         tot_tax_rmd += trad_tax_fed * ratio_surplus
                 else:
@@ -878,6 +810,8 @@ with tab1:
                     p2_roth_bal -= r2
                     shortfall -= take_roth
 
+                    roth_out_yr = take_roth
+
                     if shortfall > 0:
                         ordinary_gross = gross_trad
                         net_brok_drawn, brok_tax_fed, brok_tax_state, p1_brok_bal, p1_brok_basis, p2_brok_bal, p2_brok_basis = withdraw_from_dual_brokerage_dynamic(
@@ -885,7 +819,10 @@ with tab1:
                             state_tax_decimal, allow_negative_brokerage)
                         shortfall -= net_brok_drawn
 
-                        tax += (brok_tax_fed + brok_tax_state)
+                        brok_out_yr = net_brok_drawn + brok_tax_fed + brok_tax_state
+                        cg_tax_paid_yr += brok_tax_fed
+                        state_tax_paid_yr += brok_tax_state
+
                         tot_tax_brokerage += brok_tax_fed
                         tot_state_tax_retired += brok_tax_state
 
@@ -901,7 +838,12 @@ with tab1:
                 data.append([
                     age, status_label, f"{current_return * 100:.2f}%", round(current_spend),
                     round(p1_trad_bal), round(p2_trad_bal), round(p1_roth_bal), round(p2_roth_bal),
-                    round(p1_brok_bal), round(p2_brok_bal), round(gross_trad), round(tax)
+                    round(p1_brok_bal), round(p2_brok_bal),
+                    round(pre_tax_in_yr), round(pre_tax_out_yr),
+                    round(roth_in_yr), round(roth_out_yr),
+                    round(brok_in_yr), round(brok_out_yr),
+                    round(rmd_amt_yr), round(fed_tax_paid_yr), round(state_tax_paid_yr), round(cg_tax_paid_yr),
+                    round(penalty_paid_yr)
                 ])
 
             if age == target_lifespan:
@@ -911,13 +853,13 @@ with tab1:
         if depletion_age is None: depletion_age = "Never"
 
         if return_data:
-            return data, ending_bal, portfolio_at_retire, tot_penalties, tot_roth_conv_net, tot_rmd_overflow_net, tot_tax_living, tot_tax_roth, tot_tax_rmd, tot_tax_brokerage, tot_state_tax_working, tot_state_tax_retired, depletion_age
+            return data, ending_bal, portfolio_at_retire, tot_penalties, tot_roth_conv_net, tot_rmd_overflow_net, tot_tax_living, tot_tax_roth, tot_tax_rmd, tot_tax_brokerage, tot_state_tax_retired, depletion_age, retire_balances_dict
         return ending_bal
 
 
     # --- RUN SOLVERS ---
     sim_results = run_simulation(target_gross_income, return_data=True)
-    data, _, portfolio_at_retire, tot_penalties, tot_roth_conv_net, tot_rmd_overflow_net, tot_tax_living, tot_tax_roth, tot_tax_rmd, tot_tax_brokerage, tot_state_tax_working, tot_state_tax_retired, depletion_age = sim_results
+    data, _, portfolio_at_retire, tot_penalties, tot_roth_conv_net, tot_rmd_overflow_net, tot_tax_living, tot_tax_roth, tot_tax_rmd, tot_tax_brokerage, tot_state_tax_retired, depletion_age, retire_balances_dict = sim_results
 
     try:
         res_zero = opt.root_scalar(lambda x: run_simulation(x, allow_negative_brokerage=True), bracket=[0, 3000000],
@@ -937,9 +879,13 @@ with tab1:
     # DISPLAY RESULTS
     # ==========================================
     df = pd.DataFrame(data, columns=[
-        "Age", "Status", "Effective Return", "Target Net Spend",
+        "Age", "Status", "Eff. Return", "Net Spend Target",
         "P1 Pre-Tax", "P2 Pre-Tax", "P1 Post-Tax (Roth)", "P2 Post-Tax (Roth)",
-        "P1 Brokerage", "P2 Brokerage", "Gross Pre-Tax Draw", "Total Taxes Paid"
+        "P1 Brokerage", "P2 Brokerage",
+        "Pre-Tax Additions", "Pre-Tax Withdrawals",
+        "Roth Additions", "Roth Withdrawals",
+        "Brokerage Additions", "Brokerage Withdrawals",
+        "RMD Amount", "Fed Ordinary Tax", "State Tax", "Fed Cap Gains Tax", "10% Penalty"
     ])
 
     if is_single:
@@ -952,156 +898,116 @@ with tab1:
     end_of_life_balance = df[df['Age'] == target_lifespan]['Total_Bal'].iloc[0] if not df.empty else 0
 
     st.markdown("---")
-    st.header("5. Lifetime Summary & KPIs")
+    st.header("6. Lifetime Summary & KPIs")
 
-    st.markdown("### Current Monthly Contributions (Pre-Retirement)")
-
+    # -----------------------------------------------------
+    # SUBSECTION: MONTHLY SAVINGS BREAKDOWN
+    # -----------------------------------------------------
+    st.subheader("Current Monthly Savings Breakdown")
     p1_trad_401k_mo = (p1_salary * p1_trad_401k_cont) / 12
     p1_roth_401k_mo = (p1_salary * p1_roth_401k_cont) / 12
     p2_trad_401k_mo = (p2_salary * p2_trad_401k_cont) / 12
     p2_roth_401k_mo = (p2_salary * p2_roth_401k_cont) / 12
 
-    p1_match_mo = (p1_salary * p1_trad_401k_match + p1_trad_401k_flat) / 12
-    p2_match_mo = (p2_salary * p2_trad_401k_match + p2_trad_401k_flat) / 12
+    p1_trad_match_mo = (p1_salary * p1_trad_401k_match) / 12
+    p1_roth_match_mo = (p1_salary * p1_roth_401k_match) / 12
+    p2_trad_match_mo = (p2_salary * p2_trad_401k_match) / 12
+    p2_roth_match_mo = (p2_salary * p2_roth_401k_match) / 12
+
+    p1_flat_mo = p1_trad_401k_flat / 12
+    p2_flat_mo = p2_trad_401k_flat / 12
 
     total_employee = p1_trad_401k_mo + p1_roth_401k_mo + p1_trad_ira_mo + p1_roth_ira_mo + p1_brok_mo + \
                      p2_trad_401k_mo + p2_roth_401k_mo + p2_trad_ira_mo + p2_roth_ira_mo + p2_brok_mo
-    total_employer = p1_match_mo + p2_match_mo
+    total_employer = p1_trad_match_mo + p1_roth_match_mo + p1_flat_mo + p2_trad_match_mo + p2_roth_match_mo + p2_flat_mo
     total_saved = total_employee + total_employer
 
     if is_single:
         cont_col1, cont_col3 = st.columns(2)
         with cont_col1:
             st.markdown("**Person 1 Monthly Savings:**")
-            st.markdown(f"- Trad 401(k): \${p1_trad_401k_mo:,.0f} *(+ \${p1_match_mo:,.0f} Match)*")
+            st.markdown(f"- Trad 401(k): \${p1_trad_401k_mo:,.0f} *(+ \${p1_trad_match_mo:,.0f} Match)*")
             st.markdown(f"- Trad IRA: \${p1_trad_ira_mo:,.0f}")
-            st.markdown(f"- Roth 401(k): \${p1_roth_401k_mo:,.0f}")
+            st.markdown(f"- Roth 401(k): \${p1_roth_401k_mo:,.0f} *(+ \${p1_roth_match_mo:,.0f} Match)*")
             st.markdown(f"- Roth IRA: \${p1_roth_ira_mo:,.0f}")
             st.markdown(f"- Brokerage: \${p1_brok_mo:,.0f}")
         with cont_col3:
             st.markdown("**Total Household Monthly:**")
             st.markdown(f"- **Total Employee (Out of Pocket):** \${total_employee:,.0f}")
-            st.markdown(f"- **Total Employer (Company Match):** \${total_employer:,.0f}")
-            st.metric(
-                "Total Monthly Saved",
-                f"${total_saved:,.0f}",
-                help="Sum of all employee out-of-pocket contributions and employer match/profit sharing across all accounts."
-            )
+            st.markdown(f"- **Total Employer (% Matches):** \${p1_trad_match_mo + p1_roth_match_mo:,.0f}")
+            st.markdown(f"- **Total Employer (Flat/Bonus):** \${p1_flat_mo:,.0f}")
+            st.metric("Total Monthly Saved", f"${total_saved:,.0f}")
     else:
         cont_col1, cont_col2, cont_col3 = st.columns(3)
         with cont_col1:
             st.markdown("**Person 1 Monthly Savings:**")
-            st.markdown(f"- Trad 401(k): \${p1_trad_401k_mo:,.0f} *(+ \${p1_match_mo:,.0f} Match)*")
+            st.markdown(f"- Trad 401(k): \${p1_trad_401k_mo:,.0f} *(+ \${p1_trad_match_mo:,.0f} Match)*")
             st.markdown(f"- Trad IRA: \${p1_trad_ira_mo:,.0f}")
-            st.markdown(f"- Roth 401(k): \${p1_roth_401k_mo:,.0f}")
+            st.markdown(f"- Roth 401(k): \${p1_roth_401k_mo:,.0f} *(+ \${p1_roth_match_mo:,.0f} Match)*")
             st.markdown(f"- Roth IRA: \${p1_roth_ira_mo:,.0f}")
             st.markdown(f"- Brokerage: \${p1_brok_mo:,.0f}")
         with cont_col2:
             st.markdown("**Person 2 Monthly Savings:**")
-            st.markdown(f"- Trad 401(k): \${p2_trad_401k_mo:,.0f} *(+ \${p2_match_mo:,.0f} Match)*")
+            st.markdown(f"- Trad 401(k): \${p2_trad_401k_mo:,.0f} *(+ \${p2_trad_match_mo:,.0f} Match)*")
             st.markdown(f"- Trad IRA: \${p2_trad_ira_mo:,.0f}")
-            st.markdown(f"- Roth 401(k): \${p2_roth_401k_mo:,.0f}")
+            st.markdown(f"- Roth 401(k): \${p2_roth_401k_mo:,.0f} *(+ \${p2_roth_match_mo:,.0f} Match)*")
             st.markdown(f"- Roth IRA: \${p2_roth_ira_mo:,.0f}")
             st.markdown(f"- Brokerage: \${p2_brok_mo:,.0f}")
         with cont_col3:
             st.markdown("**Total Household Monthly:**")
             st.markdown(f"- **Total Employee (Out of Pocket):** \${total_employee:,.0f}")
-            st.markdown(f"- **Total Employer (Company Match):** \${total_employer:,.0f}")
-            st.metric(
-                "Total Monthly Saved",
-                f"${total_saved:,.0f}",
-                help="Sum of all employee out-of-pocket contributions and employer match/profit sharing across all accounts."
-            )
+            st.markdown(
+                f"- **Total Employer (% Matches):** \${p1_trad_match_mo + p2_trad_match_mo + p1_roth_match_mo + p2_roth_match_mo:,.0f}")
+            st.markdown(f"- **Total Employer (Flat/Bonus):** \${p1_flat_mo + p2_flat_mo:,.0f}")
+            st.metric("Total Monthly Saved", f"${total_saved:,.0f}")
 
-    st.markdown("### Federal, State & Local Taxes")
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # -----------------------------------------------------
+    # SUBSECTION: PORTFOLIO MILESTONES & SOLVERS
+    # -----------------------------------------------------
+    st.subheader("Portfolio Milestones & Solvers")
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+    with kpi1:
+        st.metric("Portfolio Balance at Retirement", f"${portfolio_at_retire:,.0f}",
+                  help="Projected value of all accounts at the exact retirement age.")
+    with kpi2:
+        st.metric(f"Portfolio Balance at Age {target_lifespan}", f"${end_of_life_balance:,.0f}",
+                  help=f"Projected net worth across all accounts at your target lifespan age ({target_lifespan}).")
+    with kpi3:
+        st.metric("Stable Portfolio Solver (Preserve Principal)", f"${max_income_stable:,.0f}",
+                  help="The exact sustainable gross withdrawal where terminal balance at target lifespan equals starting balance at retirement.")
+    with kpi4:
+        st.metric("Max Spend Solver (Die at Zero)", f"${max_income_zero:,.0f}",
+                  help="The maximum sustainable gross withdrawal that depletes the entire portfolio to exactly $0 at the target lifespan age.")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # -----------------------------------------------------
+    # SUBSECTION: TAX ANALYSIS & ADVANCED STRATEGY
+    # -----------------------------------------------------
+    st.subheader("Tax Analysis & Advanced Strategy")
     tax_col1, tax_col2, tax_col3, tax_col4 = st.columns(4)
     with tax_col1:
-        st.metric(
-            "State & Local Tax (Working)",
-            f"${tot_state_tax_working:,.0f}",
-            help="Total state income taxes and local Earned Income Taxes paid on wage salary during the accumulation phase."
-        )
+        st.metric("Federal Tax (Retirement Living)", f"${tot_tax_living:,.0f}",
+                  help="Cumulative federal income taxes paid on withdrawals used directly to fund your baseline living expenses.")
+        st.metric("Federal Cap Gains (Retirement)", f"${tot_tax_brokerage:,.0f}",
+                  help="Cumulative federal long-term capital gains taxes automatically evaluated across progressive 0%, 15%, and 20% IRS brackets.")
     with tax_col2:
-        st.metric(
-            "State Tax (Retirement)",
-            f"${tot_state_tax_retired:,.0f}",
-            help="Total state income taxes paid on pre-tax distributions and capital gains during the decumulation phase."
-        )
+        st.metric("State Tax (Retirement)", f"${tot_state_tax_retired:,.0f}",
+                  help="Total state income taxes paid on pre-tax distributions and capital gains during the decumulation phase.")
+        st.metric("Total Early Penalties Paid", f"${tot_penalties:,.0f}",
+                  help="Total 10% IRS penalties incurred from forced early pre-tax withdrawals prior to penalty age.")
     with tax_col3:
-        st.metric(
-            "Federal Tax (Retirement Living)",
-            f"${tot_tax_living:,.0f}",
-            help="Cumulative federal income taxes paid on withdrawals used directly to fund your baseline living expenses."
-        )
+        st.metric("Total Tax-Free Roth Conversions", f"${tot_roth_conv_net:,.0f}",
+                  help="Cumulative surplus net withdrawals successfully rolled into Roth accounts during Phase 2 (ages 60 to 74).")
+        st.metric("Taxes: Roth Conversion", f"${tot_tax_roth:,.0f}",
+                  help="Cumulative federal taxes paid to convert surplus pre-tax dollars into tax-free Roth accounts during Phase 2.")
     with tax_col4:
-        st.metric(
-            "Federal Cap Gains (Retirement)",
-            f"${tot_tax_brokerage:,.0f}",
-            help="Cumulative federal long-term capital gains taxes automatically evaluated across progressive 0%, 15%, and 20% IRS brackets."
-        )
-
-    st.markdown("---")
-    kpi1, kpi2, kpi3 = st.columns(3)
-    with kpi1:
-        st.metric(
-            "Age at Portfolio Depletion",
-            str(depletion_age),
-            help="Age at which all combined accounts hit $0. Displays 'Never' if funds endure past the target lifespan."
-        )
-        st.metric(
-            "Total Early Penalties Paid",
-            f"${tot_penalties:,.0f}",
-            help="Total 10% IRS penalties incurred from forced early pre-tax withdrawals prior to penalty age."
-        )
-        st.metric(
-            "Portfolio Balance at Retirement",
-            f"${portfolio_at_retire:,.0f}",
-            help="Projected value of all Pre-Tax, Roth, and Taxable Brokerage accounts at the exact retirement age."
-        )
-        st.metric(
-            f"Portfolio Balance at Age {target_lifespan}",
-            f"${end_of_life_balance:,.0f}",
-            help=f"Projected net worth across all accounts at your target lifespan age ({target_lifespan})."
-        )
-
-    with kpi2:
-        st.metric(
-            "Total Tax-Free Roth Conversions",
-            f"${tot_roth_conv_net:,.0f}",
-            help="Cumulative surplus net withdrawals successfully rolled into Roth accounts during Phase 2 (ages 60 to 74)."
-        )
-        st.metric(
-            "Taxes: Roth Conversion",
-            f"${tot_tax_roth:,.0f}",
-            help="Cumulative taxes paid to convert surplus pre-tax dollars into tax-free Roth accounts during Phase 2."
-        )
-
-    with kpi3:
-        st.metric(
-            "Total RMD Overflows to Brokerage",
-            f"${tot_rmd_overflow_net:,.0f}",
-            help="Cumulative after-tax distributions forced by IRS RMDs (age 75+) that exceeded living expenses and swept into Taxable accounts."
-        )
-        st.metric(
-            "Taxes: RMD Overflows",
-            f"${tot_tax_rmd:,.0f}",
-            help="Cumulative federal taxes paid on mandatory RMD withdrawals that exceeded your lifestyle spending requirements."
-        )
-
-    st.markdown("### Optimization Solvers")
-    kpi4, kpi5 = st.columns(2)
-    with kpi4:
-        st.metric(
-            "Max Allowable Pre-Tax Ret. Spend (Die at Zero)",
-            f"${max_income_zero:,.0f}",
-            help="The maximum sustainable gross withdrawal that depletes the entire portfolio to exactly $0 at the target lifespan age."
-        )
-    with kpi5:
-        st.metric(
-            "Stable Portfolio Pre-Tax Spend (Preserve Principal)",
-            f"${max_income_stable:,.0f}",
-            help="The exact sustainable gross withdrawal where terminal balance at target lifespan equals starting balance at retirement."
-        )
+        st.metric("Total RMD Overflows to Brokerage", f"${tot_rmd_overflow_net:,.0f}",
+                  help="Cumulative after-tax distributions forced by IRS RMDs (age 75+) that exceeded living expenses and swept into Taxable accounts.")
+        st.metric("Taxes: RMD Overflows", f"${tot_tax_rmd:,.0f}",
+                  help="Cumulative federal taxes paid on mandatory RMD withdrawals that exceeded your lifestyle spending requirements.")
 
     st.markdown("---")
     st.subheader("Account Balances Over Time")
@@ -1110,6 +1016,9 @@ with tab1:
     if not is_single:
         y_cols.extend(["P2 Pre-Tax", "P2 Post-Tax (Roth)", "P2 Brokerage"])
 
+    # Sort columns so the largest balance at retirement forms the base of the area chart
+    y_cols.sort(key=lambda x: retire_balances_dict.get(x, 0), reverse=True)
+
     chart_data = df[["Age"] + y_cols]
     fig = px.area(
         chart_data, x="Age", y=y_cols,
@@ -1117,7 +1026,7 @@ with tab1:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("6. Lifetime Projection & Automated Waterfall")
+    st.subheader("7. Lifetime Projection & Automated Waterfall")
     st.dataframe(df.drop(columns=['Total_Bal']), use_container_width=True)
 
 # ==========================================
@@ -1138,7 +1047,7 @@ with tab2:
         *   Contributions enter gross before tax.
         *   Assets compound with **100% tax deferral** (no annual taxes on dividends, interest, or turnover).
         *   All distributions are taxed as ordinary income under Married Filing Jointly (MFJ) rates.
-        *   Subject to a **10% IRS excise penalty** on withdrawals prior to the Penalty Age (default: 60).
+        *   Subject to a **10% IRS excise penalty** on withdrawals prior to the Penalty Age.
     *   **Post-Tax (Roth 401(k) & Roth IRA):** 
         *   Funded strictly with after-tax capital.
         *   Assets compound with **100% tax immunity**—no annual tax drag on dividends, capital gains distributions, or turnover.
