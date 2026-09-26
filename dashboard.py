@@ -55,6 +55,9 @@ config = {
     "p2_fra_benefit": 2000, "p2_ss_age": 67,
     "rmd_start_age": 75, "penalty_age": 60, "penalty_pct": 10.0,
     "use_smile_model": True, "use_cpi": False, "cpi_rate": 2.5, "use_irmaa": False,
+    "show_trad_401k": True, "show_trad_ira": True,
+    "show_roth_401k": True, "show_roth_ira": True,
+    "show_brokerage": True,
     "p1_salary": 70000, "p1_annual_raise": 2.5,
     "p1_trad_401k_start": 45000, "p1_trad_401k_cont": 6.0, "p1_trad_401k_match": 4.0, "p1_trad_401k_flat": 0,
     "p1_trad_ira_start": 0, "p1_trad_ira_mo": 0,
@@ -399,7 +402,7 @@ if not getattr(sys, 'testing', False):
             config.update(custom_config)
             profile_loaded_name = profile_filename
 
-    # SIDEBAR: PROFILE MANAGEMENT & SETTINGS
+    # SIDEBAR: PROFILE MANAGEMENT & LOCATION SETTINGS
     profile_container = st.sidebar.container()
     with profile_container:
         st.header("📂 Profile Management")
@@ -431,15 +434,7 @@ if not getattr(sys, 'testing', False):
             st.rerun()
 
     st.sidebar.markdown("---")
-    st.sidebar.header("🌍 Household & Location")
-
-    num_people_choice = st.sidebar.radio(
-        "Household Setup",
-        options=["1 Person", "2 People"],
-        index=1 if config.get("num_people", "2 People") == "2 People" else 0,
-        help="Select whether this plan models a single filer or a married couple filing jointly (MFJ)."
-    )
-    is_single = (num_people_choice == "1 Person")
+    st.sidebar.header("🌍 State & Local Taxes")
 
     default_state = str(config.get("state", "Pennsylvania"))
     if default_state not in US_STATES:
@@ -471,8 +466,7 @@ if not getattr(sys, 'testing', False):
     local_tax_decimal = local_tax_rate / 100.0
 
     st.sidebar.markdown("---")
-    st.sidebar.header("⚙️ Engine Rules & Constraints")
-
+    st.sidebar.header("⚙️ Statutory Age Limits")
     rmd_start_age = st.sidebar.number_input("RMD Start Age", value=int(config.get("rmd_start_age", 75)), step=1,
                                             help="Age when mandatory IRS distributions start from pre-tax accounts (Currently age 75 per SECURE 2.0).")
     penalty_age = st.sidebar.number_input("Early Withdrawal Penalty Age", value=int(config.get("penalty_age", 60)),
@@ -481,20 +475,6 @@ if not getattr(sys, 'testing', False):
     penalty_pct = st.sidebar.number_input("Early Withdrawal Penalty (%)", value=float(config.get("penalty_pct", 10.0)),
                                           step=1.0,
                                           help="Statutory excise tax rate assessed by the IRS on early distributions.") / 100.0
-
-    use_smile_model = st.sidebar.checkbox("Use Retirement Spending Smile",
-                                          value=bool(config.get("use_smile_model", True)),
-                                          help="Modulates annual spending through Go-Go, Slow-Go, and Care phases to model real-world spending declines.")
-
-    st.sidebar.markdown("### Advanced Institutional Toggles")
-    use_cpi = st.sidebar.checkbox("Model Inflation (Nominal Dollars & CPI)", value=bool(config.get("use_cpi", False)),
-                                  help="Converts Real Returns to Nominal Returns, exponentially inflates spending, and indexes IRS tax brackets to prevent artificial bracket creep.")
-    cpi_rate = st.sidebar.number_input("CPI Inflation Rate (%)", value=float(config.get("cpi_rate", 2.5)), step=0.1,
-                                       help="Expected annual inflation rate applied to the tax code and living expenses.") / 100.0 if use_cpi else 0.0
-
-    use_irmaa = st.sidebar.checkbox("Calculate Medicare IRMAA Surcharges (Age 65+)",
-                                    value=bool(config.get("use_irmaa", False)),
-                                    help="Evaluates your MAGI against Medicare cliffs and deducts required surcharges for Part B and Part D.")
 
     # DASHBOARD UI SETUP
     st.title("Auto-Optimized Retirement Engine")
@@ -509,7 +489,73 @@ if not getattr(sys, 'testing', False):
         ["📊 Retirement Dashboard", "📖 User Manual & Explainer", "📜 The Financial Story", "🎲 Monte Carlo Stress Test"])
 
     with tab1:
-        st.header("1. Macro Assumptions & Goals")
+        # ==========================================
+        # SECTION 1: GLOBAL CONTROLS & ACCOUNT CONFIGURATION
+        # ==========================================
+        st.header("1. Global Controls & Account Configuration")
+
+        cfg_col1, cfg_col2 = st.columns(2)
+
+        with cfg_col1:
+            st.subheader("Household & Spending Rules")
+            num_people_choice = st.radio(
+                "Household Setup",
+                options=["1 Person", "2 People"],
+                index=1 if config.get("num_people", "2 People") == "2 People" else 0,
+                horizontal=True,
+                help="Select whether this plan models a single filer or a married couple filing jointly (MFJ)."
+            )
+            is_single = (num_people_choice == "1 Person")
+
+            use_smile_model = st.checkbox(
+                "Use Retirement Spending Smile",
+                value=bool(config.get("use_smile_model", True)),
+                help="Modulates annual spending through Go-Go, Slow-Go, and Care phases to model real-world spending declines."
+            )
+
+            use_cpi = st.checkbox(
+                "Model Inflation (Nominal Dollars & CPI)",
+                value=bool(config.get("use_cpi", False)),
+                help="Converts Real Returns to Nominal Returns, exponentially inflates spending, and indexes IRS tax brackets to prevent artificial bracket creep."
+            )
+            cpi_rate = st.number_input(
+                "CPI Inflation Rate (%)",
+                value=float(config.get("cpi_rate", 2.5)),
+                step=0.1,
+                help="Expected annual inflation rate applied to the tax code and living expenses."
+            ) / 100.0 if use_cpi else 0.0
+
+            use_irmaa = st.checkbox(
+                "Calculate Medicare IRMAA Surcharges (Age 65+)",
+                value=bool(config.get("use_irmaa", False)),
+                help="Evaluates your MAGI against Medicare cliffs and deducts required surcharges for Part B and Part D."
+            )
+
+        with cfg_col2:
+            st.subheader("Active Account Types")
+            st.caption(
+                "Toggle which accounts your household contributes to. Turning off an account zeroes its accumulation inputs and hides it from the setup sections, while still allowing the retirement model to sweep surplus funds into Roth or Taxable buckets.")
+
+            acc_c1, acc_c2 = st.columns(2)
+            with acc_c1:
+                show_trad_401k = st.checkbox("Traditional 401(k)", value=bool(config.get("show_trad_401k", True)),
+                                             help="Uncheck to hide and zero all Traditional 401(k) starting balances and payroll contributions.")
+                show_trad_ira = st.checkbox("Traditional IRA", value=bool(config.get("show_trad_ira", True)),
+                                            help="Uncheck to hide and zero all Traditional IRA starting balances and monthly savings.")
+                show_brokerage = st.checkbox("Taxable Brokerage", value=bool(config.get("show_brokerage", True)),
+                                             help="Uncheck to hide and zero all initial Non-Qualified Brokerage balances and savings.")
+            with acc_c2:
+                show_roth_401k = st.checkbox("Roth 401(k)", value=bool(config.get("show_roth_401k", True)),
+                                             help="Uncheck to hide and zero all designated Roth 401(k) starting balances and payroll contributions.")
+                show_roth_ira = st.checkbox("Roth IRA", value=bool(config.get("show_roth_ira", True)),
+                                            help="Uncheck to hide and zero all Roth IRA starting balances and monthly savings.")
+
+        st.markdown("---")
+
+        # ==========================================
+        # SECTION 2: MACRO ASSUMPTIONS & GOALS
+        # ==========================================
+        st.header("2. Macro Assumptions & Goals")
 
         mac1, mac2, mac3, mac4 = st.columns(4)
         with mac1:
@@ -672,10 +718,10 @@ if not getattr(sys, 'testing', False):
 
         st.markdown("---")
 
-        # ----------------------------------------
-        # SECTION 2: Income & Salaries
-        # ----------------------------------------
-        st.header("2. Base Salaries")
+        # ==========================================
+        # SECTION 3: BASE SALARIES
+        # ==========================================
+        st.header("3. Base Salaries")
         col2a, col2b = st.columns(2)
         with col2a:
             p1_salary = st.number_input("Person 1 Salary ($)", value=float(config["p1_salary"]), step=5000.0,
@@ -692,118 +738,172 @@ if not getattr(sys, 'testing', False):
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # ----------------------------------------
-        # SECTION 3: Pre-Tax Accounts
-        # ----------------------------------------
-        st.header("3. Pre-Tax Accounts (Traditional 401k & IRA)")
-        col3a, col3b = st.columns(2)
-        with col3a:
-            st.subheader("Person 1")
-            p1_trad_401k_start = st.number_input("P1 Trad 401(k) Start Bal", value=float(config["p1_trad_401k_start"]),
-                                                 step=10000.0,
-                                                 help="Current balance in Person 1's Traditional Pre-Tax 401(k).")
-            p1_trad_401k_cont = st.number_input("P1 Trad 401(k) Contrib (%)", value=float(config["p1_trad_401k_cont"]),
-                                                step=1.0,
-                                                help="Percentage of Person 1's salary contributed to their Pre-Tax 401(k).") / 100.0
-            p1_trad_401k_match = st.number_input("P1 Trad 401(k) Match (%)", value=float(config["p1_trad_401k_match"]),
-                                                 step=1.0,
-                                                 help="Employer matching percentage deposited as Pre-Tax Traditional.") / 100.0
-            p1_trad_401k_flat = st.number_input("P1 401(k) Flat Bonus/Yr ($)", value=float(config["p1_trad_401k_flat"]),
-                                                step=1000.0,
-                                                help="Fixed annual non-elective employer contribution or profit sharing.")
-            p1_trad_ira_start = st.number_input("P1 Trad IRA Start Bal", value=float(config["p1_trad_ira_start"]),
-                                                step=5000.0, help="Current balance in Person 1's Traditional IRA.")
-            p1_trad_ira_mo = st.number_input("P1 Trad IRA Monthly ($)", value=float(config["p1_trad_ira_mo"]),
-                                             step=100.0,
-                                             help="Fixed monthly out-of-pocket contribution to Person 1's Traditional IRA.")
-        with col3b:
-            st.subheader("Person 2")
-            p2_trad_401k_start = st.number_input("P2 Trad 401(k) Start Bal", value=float(config["p2_trad_401k_start"]),
-                                                 step=10000.0, disabled=is_single,
-                                                 help="Current balance in Person 2's Traditional Pre-Tax 401(k).")
-            p2_trad_401k_cont = st.number_input("P2 Trad 401(k) Contrib (%)", value=float(config["p2_trad_401k_cont"]),
-                                                step=1.0, disabled=is_single,
-                                                help="Percentage of Person 2's salary contributed to their Pre-Tax 401(k).") / 100.0
-            p2_trad_401k_match = st.number_input("P2 Trad 401(k) Match (%)", value=float(config["p2_trad_401k_match"]),
-                                                 step=1.0, disabled=is_single,
-                                                 help="Employer matching percentage deposited as Pre-Tax Traditional.") / 100.0
-            p2_trad_401k_flat = st.number_input("P2 401(k) Flat Bonus/Yr ($)", value=float(config["p2_trad_401k_flat"]),
-                                                step=1000.0, disabled=is_single,
-                                                help="Fixed annual non-elective employer contribution or profit sharing.")
-            p2_trad_ira_start = st.number_input("P2 Trad IRA Start Bal", value=float(config["p2_trad_ira_start"]),
-                                                step=5000.0, disabled=is_single,
-                                                help="Current balance in Person 2's Traditional IRA.")
-            p2_trad_ira_mo = st.number_input("P2 Trad IRA Monthly ($)", value=float(config["p2_trad_ira_mo"]),
-                                             step=100.0, disabled=is_single,
-                                             help="Fixed monthly out-of-pocket contribution to Person 2's Traditional IRA.")
+        # ==========================================
+        # SECTION 4: PRE-TAX ACCOUNTS (TRADITIONAL 401K & IRA)
+        # ==========================================
+        if show_trad_401k or show_trad_ira:
+            st.header("4. Pre-Tax Accounts (Traditional 401k & IRA)")
+            col3a, col3b = st.columns(2)
+            with col3a:
+                st.subheader("Person 1")
+                if show_trad_401k:
+                    p1_trad_401k_start = st.number_input("P1 Trad 401(k) Start Bal",
+                                                         value=float(config["p1_trad_401k_start"]), step=10000.0,
+                                                         help="Current balance in Person 1's Traditional Pre-Tax 401(k).")
+                    p1_trad_401k_cont = st.number_input("P1 Trad 401(k) Contrib (%)",
+                                                        value=float(config["p1_trad_401k_cont"]), step=1.0,
+                                                        help="Percentage of Person 1's salary contributed to their Pre-Tax 401(k).") / 100.0
+                    p1_trad_401k_match = st.number_input("P1 Trad 401(k) Match (%)",
+                                                         value=float(config["p1_trad_401k_match"]), step=1.0,
+                                                         help="Employer matching percentage deposited as Pre-Tax Traditional.") / 100.0
+                    p1_trad_401k_flat = st.number_input("P1 401(k) Flat Bonus/Yr ($)",
+                                                        value=float(config["p1_trad_401k_flat"]), step=1000.0,
+                                                        help="Fixed annual non-elective employer contribution or profit sharing.")
+                else:
+                    p1_trad_401k_start = p1_trad_401k_cont = p1_trad_401k_match = p1_trad_401k_flat = 0.0
 
-        st.markdown("<br>", unsafe_allow_html=True)
+                if show_trad_ira:
+                    p1_trad_ira_start = st.number_input("P1 Trad IRA Start Bal",
+                                                        value=float(config["p1_trad_ira_start"]), step=5000.0,
+                                                        help="Current balance in Person 1's Traditional IRA.")
+                    p1_trad_ira_mo = st.number_input("P1 Trad IRA Monthly ($)", value=float(config["p1_trad_ira_mo"]),
+                                                     step=100.0,
+                                                     help="Fixed monthly out-of-pocket contribution to Person 1's Traditional IRA.")
+                else:
+                    p1_trad_ira_start = p1_trad_ira_mo = 0.0
 
-        # ----------------------------------------
-        # SECTION 4: Post-Tax Accounts
-        # ----------------------------------------
-        st.header("4. Post-Tax Accounts (Roth 401k & IRA)")
-        col4a, col4b = st.columns(2)
-        with col4a:
-            st.subheader("Person 1")
-            p1_roth_401k_start = st.number_input("P1 Roth 401(k) Start Bal", value=float(config["p1_roth_401k_start"]),
-                                                 step=5000.0,
-                                                 help="Current balance in Person 1's designated Roth 401(k).")
-            p1_roth_401k_cont = st.number_input("P1 Roth 401(k) Contrib (%)", value=float(config["p1_roth_401k_cont"]),
-                                                step=1.0,
-                                                help="Percentage of Person 1's salary contributed to their Roth 401(k).") / 100.0
-            p1_roth_401k_match = st.number_input("P1 Roth 401(k) Match (%)",
-                                                 value=float(config.get("p1_roth_401k_match", 0.0)), step=1.0,
-                                                 help="Employer matching percentage legally deposited as Roth (per SECURE 2.0).") / 100.0
-            p1_roth_ira_start = st.number_input("P1 Roth IRA Start Bal", value=float(config["p1_roth_ira_start"]),
-                                                step=5000.0, help="Current balance in Person 1's Roth IRA.")
-            p1_roth_ira_mo = st.number_input("P1 Roth IRA Monthly ($)", value=float(config["p1_roth_ira_mo"]),
-                                             step=100.0,
-                                             help="Fixed monthly contribution to Person 1's Roth IRA (subject to annual IRS limits).")
-        with col4b:
-            st.subheader("Person 2")
-            p2_roth_401k_start = st.number_input("P2 Roth 401(k) Start Bal", value=float(config["p2_roth_401k_start"]),
-                                                 step=5000.0, disabled=is_single,
-                                                 help="Current balance in Person 2's designated Roth 401(k).")
-            p2_roth_401k_cont = st.number_input("P2 Roth 401(k) Contrib (%)", value=float(config["p2_roth_401k_cont"]),
-                                                step=1.0, disabled=is_single,
-                                                help="Percentage of Person 2's salary contributed to their Roth 401(k).") / 100.0
-            p2_roth_401k_match = st.number_input("P2 Roth 401(k) Match (%)",
-                                                 value=float(config.get("p2_roth_401k_match", 0.0)), step=1.0,
-                                                 disabled=is_single,
-                                                 help="Employer matching percentage legally deposited as Roth (per SECURE 2.0).") / 100.0
-            p2_roth_ira_start = st.number_input("P2 Roth IRA Start Bal", value=float(config["p2_roth_ira_start"]),
-                                                step=5000.0, disabled=is_single,
-                                                help="Current balance in Person 2's Roth IRA.")
-            p2_roth_ira_mo = st.number_input("P2 Roth IRA Monthly ($)", value=float(config["p2_roth_ira_mo"]),
-                                             step=100.0, disabled=is_single,
-                                             help="Fixed monthly contribution to Person 2's Roth IRA.")
+            with col3b:
+                st.subheader("Person 2")
+                if show_trad_401k:
+                    p2_trad_401k_start = st.number_input("P2 Trad 401(k) Start Bal",
+                                                         value=float(config["p2_trad_401k_start"]), step=10000.0,
+                                                         disabled=is_single,
+                                                         help="Current balance in Person 2's Traditional Pre-Tax 401(k).")
+                    p2_trad_401k_cont = st.number_input("P2 Trad 401(k) Contrib (%)",
+                                                        value=float(config["p2_trad_401k_cont"]), step=1.0,
+                                                        disabled=is_single,
+                                                        help="Percentage of Person 2's salary contributed to their Pre-Tax 401(k).") / 100.0
+                    p2_trad_401k_match = st.number_input("P2 Trad 401(k) Match (%)",
+                                                         value=float(config["p2_trad_401k_match"]), step=1.0,
+                                                         disabled=is_single,
+                                                         help="Employer matching percentage deposited as Pre-Tax Traditional.") / 100.0
+                    p2_trad_401k_flat = st.number_input("P2 401(k) Flat Bonus/Yr ($)",
+                                                        value=float(config["p2_trad_401k_flat"]), step=1000.0,
+                                                        disabled=is_single,
+                                                        help="Fixed annual non-elective employer contribution or profit sharing.")
+                else:
+                    p2_trad_401k_start = p2_trad_401k_cont = p2_trad_401k_match = p2_trad_401k_flat = 0.0
 
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        # ----------------------------------------
-        # SECTION 5: Taxable Accounts
-        # ----------------------------------------
-        st.header("5. Taxable Accounts (Brokerage)")
-        col5a, col5b = st.columns(2)
-        with col5a:
-            st.subheader("Person 1")
-            p1_brok_start = st.number_input("P1 Brokerage Start Bal", value=float(config["p1_brok_start"]), step=5000.0,
-                                            help="Current balance in Person 1's Non-Qualified Taxable Brokerage account.")
-            p1_brok_mo = st.number_input("P1 Brokerage Monthly ($)", value=float(config["p1_brok_mo"]), step=100.0,
-                                         help="Monthly post-tax contribution to Person 1's Taxable Brokerage.")
-        with col5b:
-            st.subheader("Person 2")
-            p2_brok_start = st.number_input("P2 Brokerage Start Bal", value=float(config["p2_brok_start"]), step=5000.0,
-                                            disabled=is_single,
-                                            help="Current balance in Person 2's Non-Qualified Taxable Brokerage account.")
-            p2_brok_mo = st.number_input("P2 Brokerage Monthly ($)", value=float(config["p2_brok_mo"]), step=100.0,
-                                         disabled=is_single,
-                                         help="Monthly post-tax contribution to Person 2's Taxable Brokerage.")
+                if show_trad_ira:
+                    p2_trad_ira_start = st.number_input("P2 Trad IRA Start Bal",
+                                                        value=float(config["p2_trad_ira_start"]), step=5000.0,
+                                                        disabled=is_single,
+                                                        help="Current balance in Person 2's Traditional IRA.")
+                    p2_trad_ira_mo = st.number_input("P2 Trad IRA Monthly ($)", value=float(config["p2_trad_ira_mo"]),
+                                                     step=100.0, disabled=is_single,
+                                                     help="Fixed monthly out-of-pocket contribution to Person 2's Traditional IRA.")
+                else:
+                    p2_trad_ira_start = p2_trad_ira_mo = 0.0
+            st.markdown("<br>", unsafe_allow_html=True)
+        else:
+            p1_trad_401k_start = p1_trad_401k_cont = p1_trad_401k_match = p1_trad_401k_flat = 0.0
+            p1_trad_ira_start = p1_trad_ira_mo = 0.0
+            p2_trad_401k_start = p2_trad_401k_cont = p2_trad_401k_match = p2_trad_401k_flat = 0.0
+            p2_trad_ira_start = p2_trad_ira_mo = 0.0
 
         # ==========================================
-        # JSON PROFILE EXPORTER
+        # SECTION 5: POST-TAX ACCOUNTS (ROTH 401K & IRA)
         # ==========================================
+        if show_roth_401k or show_roth_ira:
+            st.header("5. Post-Tax Accounts (Roth 401k & IRA)")
+            col4a, col4b = st.columns(2)
+            with col4a:
+                st.subheader("Person 1")
+                if show_roth_401k:
+                    p1_roth_401k_start = st.number_input("P1 Roth 401(k) Start Bal",
+                                                         value=float(config["p1_roth_401k_start"]), step=5000.0,
+                                                         help="Current balance in Person 1's designated Roth 401(k).")
+                    p1_roth_401k_cont = st.number_input("P1 Roth 401(k) Contrib (%)",
+                                                        value=float(config["p1_roth_401k_cont"]), step=1.0,
+                                                        help="Percentage of Person 1's salary contributed to their Roth 401(k).") / 100.0
+                    p1_roth_401k_match = st.number_input("P1 Roth 401(k) Match (%)",
+                                                         value=float(config.get("p1_roth_401k_match", 0.0)), step=1.0,
+                                                         help="Employer matching percentage legally deposited as Roth (per SECURE 2.0).") / 100.0
+                else:
+                    p1_roth_401k_start = p1_roth_401k_cont = p1_roth_401k_match = 0.0
+
+                if show_roth_ira:
+                    p1_roth_ira_start = st.number_input("P1 Roth IRA Start Bal",
+                                                        value=float(config["p1_roth_ira_start"]), step=5000.0,
+                                                        help="Current balance in Person 1's Roth IRA.")
+                    p1_roth_ira_mo = st.number_input("P1 Roth IRA Monthly ($)", value=float(config["p1_roth_ira_mo"]),
+                                                     step=100.0,
+                                                     help="Fixed monthly contribution to Person 1's Roth IRA (subject to annual IRS limits).")
+                else:
+                    p1_roth_ira_start = p1_roth_ira_mo = 0.0
+
+            with col4b:
+                st.subheader("Person 2")
+                if show_roth_401k:
+                    p2_roth_401k_start = st.number_input("P2 Roth 401(k) Start Bal",
+                                                         value=float(config["p2_roth_401k_start"]), step=5000.0,
+                                                         disabled=is_single,
+                                                         help="Current balance in Person 2's designated Roth 401(k).")
+                    p2_roth_401k_cont = st.number_input("P2 Roth 401(k) Contrib (%)",
+                                                        value=float(config["p2_roth_401k_cont"]), step=1.0,
+                                                        disabled=is_single,
+                                                        help="Percentage of Person 2's salary contributed to their Roth 401(k).") / 100.0
+                    p2_roth_401k_match = st.number_input("P2 Roth 401(k) Match (%)",
+                                                         value=float(config.get("p2_roth_401k_match", 0.0)), step=1.0,
+                                                         disabled=is_single,
+                                                         help="Employer matching percentage legally deposited as Roth (per SECURE 2.0).") / 100.0
+                else:
+                    p2_roth_401k_start = p2_roth_401k_cont = p2_roth_401k_match = 0.0
+
+                if show_roth_ira:
+                    p2_roth_ira_start = st.number_input("P2 Roth IRA Start Bal",
+                                                        value=float(config["p2_roth_ira_start"]), step=5000.0,
+                                                        disabled=is_single,
+                                                        help="Current balance in Person 2's Roth IRA.")
+                    p2_roth_ira_mo = st.number_input("P2 Roth IRA Monthly ($)", value=float(config["p2_roth_ira_mo"]),
+                                                     step=100.0, disabled=is_single,
+                                                     help="Fixed monthly contribution to Person 2's Roth IRA.")
+                else:
+                    p2_roth_ira_start = p2_roth_ira_mo = 0.0
+            st.markdown("<br>", unsafe_allow_html=True)
+        else:
+            p1_roth_401k_start = p1_roth_401k_cont = p1_roth_401k_match = 0.0
+            p1_roth_ira_start = p1_roth_ira_mo = 0.0
+            p2_roth_401k_start = p2_roth_401k_cont = p2_roth_401k_match = 0.0
+            p2_roth_ira_start = p2_roth_ira_mo = 0.0
+
+        # ==========================================
+        # SECTION 6: TAXABLE ACCOUNTS (BROKERAGE)
+        # ==========================================
+        if show_brokerage:
+            st.header("6. Taxable Accounts (Brokerage)")
+            col5a, col5b = st.columns(2)
+            with col5a:
+                st.subheader("Person 1")
+                p1_brok_start = st.number_input("P1 Brokerage Start Bal", value=float(config["p1_brok_start"]),
+                                                step=5000.0,
+                                                help="Current balance in Person 1's Non-Qualified Taxable Brokerage account.")
+                p1_brok_mo = st.number_input("P1 Brokerage Monthly ($)", value=float(config["p1_brok_mo"]), step=100.0,
+                                             help="Monthly post-tax contribution to Person 1's Taxable Brokerage.")
+            with col5b:
+                st.subheader("Person 2")
+                p2_brok_start = st.number_input("P2 Brokerage Start Bal", value=float(config["p2_brok_start"]),
+                                                step=5000.0, disabled=is_single,
+                                                help="Current balance in Person 2's Non-Qualified Taxable Brokerage account.")
+                p2_brok_mo = st.number_input("P2 Brokerage Monthly ($)", value=float(config["p2_brok_mo"]), step=100.0,
+                                             disabled=is_single,
+                                             help="Monthly post-tax contribution to Person 2's Taxable Brokerage.")
+            st.markdown("<br>", unsafe_allow_html=True)
+        else:
+            p1_brok_start = p1_brok_mo = 0.0
+            p2_brok_start = p2_brok_mo = 0.0
+
+        # JSON EXPORT DATA SETUP
         current_settings = {
             "num_people": num_people_choice,
             "state": state_choice,
@@ -833,6 +933,11 @@ if not getattr(sys, 'testing', False):
             "ss_payout_scenario": ss_payout_scenario if use_ss else "100% (Scheduled Benefits)",
             "p1_fra_benefit": p1_fra_benefit,
             "p1_ss_age": p1_ss_age,
+            "show_trad_401k": show_trad_401k,
+            "show_trad_ira": show_trad_ira,
+            "show_roth_401k": show_roth_401k,
+            "show_roth_ira": show_roth_ira,
+            "show_brokerage": show_brokerage,
             "p1_trad_401k_start": p1_trad_401k_start,
             "p1_trad_401k_cont": round(p1_trad_401k_cont * 100, 2),
             "p1_trad_401k_match": round(p1_trad_401k_match * 100, 2),
@@ -1352,7 +1457,7 @@ if not getattr(sys, 'testing', False):
             st.session_state.max_stable = 0.0
 
         # ==========================================
-        # DISPLAY RESULTS
+        # SECTION 7: LIFETIME SUMMARY & KPIS
         # ==========================================
         df = pd.DataFrame(sim_data, columns=[
             "Age", "Status", "Effective Return(s)", "Net Spend Target",
@@ -1376,12 +1481,9 @@ if not getattr(sys, 'testing', False):
 
         end_of_life_balance = df[df['Age'] == target_lifespan]['Total_Bal'].iloc[0] if not df.empty else 0.0
 
-        st.markdown("---")
-        st.header("6. Lifetime Summary & KPIs")
+        st.header("7. Lifetime Summary & KPIs")
 
-        # -----------------------------------------------------
         # SUBSECTION: MONTHLY SAVINGS BREAKDOWN
-        # -----------------------------------------------------
         st.subheader("Current Monthly Savings Breakdown")
         p1_trad_401k_mo = (p1_salary * p1_trad_401k_cont) / 12.0
         p1_roth_401k_mo = (p1_salary * p1_roth_401k_cont) / 12.0
@@ -1401,50 +1503,55 @@ if not getattr(sys, 'testing', False):
         total_employer = p1_trad_match_mo + p1_roth_match_mo + p1_flat_mo + p2_trad_match_mo + p2_roth_match_mo + p2_flat_mo
         total_saved = total_employee + total_employer
 
+
+        def fmt_row(label: str, val: float, match_val: float = 0.0) -> str:
+            if match_val > 0:
+                return f"- {label}: \\${val:,.0f} *(+ \\${match_val:,.0f} Match)*"
+            return f"- {label}: \\${val:,.0f}"
+
+
         if is_single:
             cont_col1, cont_col3 = st.columns(2)
             with cont_col1:
                 st.markdown("**Person 1 Monthly Savings:**")
-                st.markdown(f"- Trad 401(k): \\${p1_trad_401k_mo:,.0f} *(+ \\${p1_trad_match_mo:,.0f} Match)*")
-                st.markdown(f"- Trad IRA: \\${p1_trad_ira_mo:,.0f}")
-                st.markdown(f"- Roth 401(k): \\${p1_roth_401k_mo:,.0f} *(+ \\${p1_roth_match_mo:,.0f} Match)*")
-                st.markdown(f"- Roth IRA: \\${p1_roth_ira_mo:,.0f}")
-                st.markdown(f"- Brokerage: \\${p1_brok_mo:,.0f}")
+                if show_trad_401k: st.markdown(fmt_row("Trad 401(k)", p1_trad_401k_mo, p1_trad_match_mo))
+                if show_trad_ira: st.markdown(fmt_row("Trad IRA", p1_trad_ira_mo))
+                if show_roth_401k: st.markdown(fmt_row("Roth 401(k)", p1_roth_401k_mo, p1_roth_match_mo))
+                if show_roth_ira: st.markdown(fmt_row("Roth IRA", p1_roth_ira_mo))
+                if show_brokerage: st.markdown(fmt_row("Brokerage", p1_brok_mo))
             with cont_col3:
                 st.markdown("**Total Household Monthly:**")
                 st.markdown(f"- **Total Employee (Out of Pocket):** \\${total_employee:,.0f}")
                 st.markdown(f"- **Total Employer (% Matches):** \\${p1_trad_match_mo + p1_roth_match_mo:,.0f}")
-                st.markdown(f"- **Total Employer (Flat/Bonus):** \\${p1_flat_mo:,.0f}")
+                if show_trad_401k: st.markdown(f"- **Total Employer (Flat/Bonus):** \\${p1_flat_mo:,.0f}")
                 st.metric("Total Monthly Saved", f"${total_saved:,.0f}")
         else:
             cont_col1, cont_col2, cont_col3 = st.columns(3)
             with cont_col1:
                 st.markdown("**Person 1 Monthly Savings:**")
-                st.markdown(f"- Trad 401(k): \\${p1_trad_401k_mo:,.0f} *(+ \\${p1_trad_match_mo:,.0f} Match)*")
-                st.markdown(f"- Trad IRA: \\${p1_trad_ira_mo:,.0f}")
-                st.markdown(f"- Roth 401(k): \\${p1_roth_401k_mo:,.0f} *(+ \\${p1_roth_match_mo:,.0f} Match)*")
-                st.markdown(f"- Roth IRA: \\${p1_roth_ira_mo:,.0f}")
-                st.markdown(f"- Brokerage: \\${p1_brok_mo:,.0f}")
+                if show_trad_401k: st.markdown(fmt_row("Trad 401(k)", p1_trad_401k_mo, p1_trad_match_mo))
+                if show_trad_ira: st.markdown(fmt_row("Trad IRA", p1_trad_ira_mo))
+                if show_roth_401k: st.markdown(fmt_row("Roth 401(k)", p1_roth_401k_mo, p1_roth_match_mo))
+                if show_roth_ira: st.markdown(fmt_row("Roth IRA", p1_roth_ira_mo))
+                if show_brokerage: st.markdown(fmt_row("Brokerage", p1_brok_mo))
             with cont_col2:
                 st.markdown("**Person 2 Monthly Savings:**")
-                st.markdown(f"- Trad 401(k): \\${p2_trad_401k_mo:,.0f} *(+ \\${p2_trad_match_mo:,.0f} Match)*")
-                st.markdown(f"- Trad IRA: \\${p2_trad_ira_mo:,.0f}")
-                st.markdown(f"- Roth 401(k): \\${p2_roth_401k_mo:,.0f} *(+ \\${p2_roth_match_mo:,.0f} Match)*")
-                st.markdown(f"- Roth IRA: \\${p2_roth_ira_mo:,.0f}")
-                st.markdown(f"- Brokerage: \\${p2_brok_mo:,.0f}")
+                if show_trad_401k: st.markdown(fmt_row("Trad 401(k)", p2_trad_401k_mo, p2_trad_match_mo))
+                if show_trad_ira: st.markdown(fmt_row("Trad IRA", p2_trad_ira_mo))
+                if show_roth_401k: st.markdown(fmt_row("Roth 401(k)", p2_roth_401k_mo, p2_roth_match_mo))
+                if show_roth_ira: st.markdown(fmt_row("Roth IRA", p2_roth_ira_mo))
+                if show_brokerage: st.markdown(fmt_row("Brokerage", p2_brok_mo))
             with cont_col3:
                 st.markdown("**Total Household Monthly:**")
                 st.markdown(f"- **Total Employee (Out of Pocket):** \\${total_employee:,.0f}")
                 st.markdown(
                     f"- **Total Employer (% Matches):** \\${p1_trad_match_mo + p2_trad_match_mo + p1_roth_match_mo + p2_roth_match_mo:,.0f}")
-                st.markdown(f"- **Total Employer (Flat/Bonus):** \\${p1_flat_mo + p2_flat_mo:,.0f}")
+                if show_trad_401k: st.markdown(f"- **Total Employer (Flat/Bonus):** \\${p1_flat_mo + p2_flat_mo:,.0f}")
                 st.metric("Total Monthly Saved", f"${total_saved:,.0f}")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # -----------------------------------------------------
         # SUBSECTION: PORTFOLIO MILESTONES & SOLVERS
-        # -----------------------------------------------------
         st.subheader("Portfolio Milestones & Solvers")
         kpi1, kpi2, kpi3 = st.columns(3)
         with kpi1:
@@ -1491,9 +1598,7 @@ if not getattr(sys, 'testing', False):
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # -----------------------------------------------------
         # SUBSECTION: TAX ANALYSIS & ADVANCED STRATEGY
-        # -----------------------------------------------------
         st.subheader("Tax Analysis & Advanced Strategy")
         tax_col1, tax_col2, tax_col3, tax_col4 = st.columns(4)
         with tax_col1:
@@ -1534,7 +1639,10 @@ if not getattr(sys, 'testing', False):
             )
             st.plotly_chart(fig, use_container_width=True)
 
-        st.subheader("7. Lifetime Projection & Automated Waterfall")
+        # ==========================================
+        # SECTION 8: LIFETIME PROJECTION & AUTOMATED WATERFALL
+        # ==========================================
+        st.subheader("8. Lifetime Projection & Automated Waterfall")
         st.dataframe(df.drop(columns=['Total_Bal']) if not df.empty else df, use_container_width=True)
 
     # ==========================================
