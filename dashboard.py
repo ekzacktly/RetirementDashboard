@@ -287,6 +287,8 @@ def withdraw_from_dual_brokerage_dynamic(net_needed: float, b1: float, basis1: f
     total_bal = b1 + b2
     if total_bal <= 0:
         if allow_neg:
+            if is_single_filer:
+                return net_needed, 0.0, 0.0, 0.0, 0.0, b1 - net_needed, basis1, 0.0, 0.0
             return net_needed, 0.0, 0.0, 0.0, 0.0, b1 - (net_needed / 2.0), basis1, b2 - (net_needed / 2.0), basis2
         return 0.0, 0.0, 0.0, 0.0, 0.0, b1, basis1, b2, basis2
 
@@ -355,8 +357,11 @@ def withdraw_from_dual_brokerage_dynamic(net_needed: float, b1: float, basis1: f
 
         if allow_neg:
             shortfall = net_needed - max_net
-            d1_draw += shortfall / 2.0
-            d2_draw += shortfall / 2.0
+            if is_single_filer:
+                d1_draw += shortfall
+            else:
+                d1_draw += shortfall / 2.0
+                d2_draw += shortfall / 2.0
             net_provided = net_needed
 
     nb1 = b1 - d1_draw
@@ -471,7 +476,7 @@ if not getattr(sys, 'testing', False):
                                             help="Age when mandatory IRS distributions start from pre-tax accounts (Currently age 75 per SECURE 2.0).")
     penalty_age = st.sidebar.number_input("Early Withdrawal Penalty Age", value=int(config.get("penalty_age", 60)),
                                           step=1,
-                                          help="Age when the 10% IRS early withdrawal penalty drops off (Typically 59.5, rounded to 60).")
+                                          help="Age when the 10% IRS early withdrawal penalty drops off (Typically 59.5, rounded to 60, or 55 for Rule of 55).")
     penalty_pct = st.sidebar.number_input("Early Withdrawal Penalty (%)", value=float(config.get("penalty_pct", 10.0)),
                                           step=1.0,
                                           help="Statutory excise tax rate assessed by the IRS on early distributions.") / 100.0
@@ -1037,14 +1042,16 @@ if not getattr(sys, 'testing', False):
                 roth_bal_tot = p1_roth_bal + p2_roth_bal
                 brok_bal_tot = p1_brok_bal + p2_brok_bal
 
-                if mc_mode:
-                    mc_balance_history.append(trad_bal_tot + roth_bal_tot + brok_bal_tot)
+                start_year_total_bal = trad_bal_tot + roth_bal_tot + brok_bal_tot
 
-                if return_data and dep_age == "Never" and (trad_bal_tot + roth_bal_tot + brok_bal_tot) < 1:
+                if mc_mode:
+                    mc_balance_history.append(start_year_total_bal)
+
+                if return_data and dep_age == "Never" and start_year_total_bal < 1:
                     dep_age = str(age)
 
                 if age == retire_age or (age == current_age and current_age >= retire_age):
-                    port_at_retire = trad_bal_tot + roth_bal_tot + brok_bal_tot
+                    port_at_retire = start_year_total_bal
                     ret_balances_dict = {
                         "P1 Pre-Tax": p1_trad_bal, "P2 Pre-Tax": p2_trad_bal,
                         "P1 Post-Tax (Roth)": p1_roth_bal, "P2 Post-Tax (Roth)": p2_roth_bal,
@@ -1076,6 +1083,7 @@ if not getattr(sys, 'testing', False):
                 fed_tax_paid_yr = state_tax_paid_yr = cg_tax_paid_yr = penalty_paid_yr = rmd_amt_yr = 0.0
                 pre_tax_in_yr = pre_tax_out_yr = roth_in_yr = roth_out_yr = brok_in_yr = brok_out_yr = 0.0
                 irmaa_yr = ss_yr = 0.0
+                growth_p1_trad = growth_p2_trad = growth_p1_roth = growth_p2_roth = growth_p1_brok = growth_p2_brok = 0.0
 
                 if not is_retired:
                     p1_trad_in = (curr_p1_sal * p1_trad_401k_cont) + (
@@ -1084,22 +1092,28 @@ if not getattr(sys, 'testing', False):
                                 curr_p2_sal * p2_trad_401k_match) + p2_trad_401k_flat + (
                                              p2_trad_ira_mo * 12.0) if not is_single else 0.0
 
-                    p1_trad_bal = (p1_trad_bal + p1_trad_in) * (1.0 + ret_trad)
-                    p2_trad_bal = (p2_trad_bal + p2_trad_in) * (1.0 + ret_trad) if not is_single else 0.0
+                    growth_p1_trad = (p1_trad_bal + p1_trad_in) * ret_trad
+                    growth_p2_trad = (p2_trad_bal + p2_trad_in) * ret_trad if not is_single else 0.0
+                    p1_trad_bal += p1_trad_in + growth_p1_trad
+                    p2_trad_bal += p2_trad_in + growth_p2_trad if not is_single else 0.0
 
                     p1_roth_in = (curr_p1_sal * p1_roth_401k_cont) + (curr_p1_sal * p1_roth_401k_match) + (
                                 p1_roth_ira_mo * 12.0)
                     p2_roth_in = (curr_p2_sal * p2_roth_401k_cont) + (curr_p2_sal * p2_roth_401k_match) + (
                                 p2_roth_ira_mo * 12.0) if not is_single else 0.0
 
-                    p1_roth_bal = (p1_roth_bal + p1_roth_in) * (1.0 + ret_roth)
-                    p2_roth_bal = (p2_roth_bal + p2_roth_in) * (1.0 + ret_roth) if not is_single else 0.0
+                    growth_p1_roth = (p1_roth_bal + p1_roth_in) * ret_roth
+                    growth_p2_roth = (p2_roth_bal + p2_roth_in) * ret_roth if not is_single else 0.0
+                    p1_roth_bal += p1_roth_in + growth_p1_roth
+                    p2_roth_bal += p2_roth_in + growth_p2_roth if not is_single else 0.0
 
                     p1_brok_in = p1_brok_mo * 12.0
                     p2_brok_in = p2_brok_mo * 12.0 if not is_single else 0.0
-                    p1_brok_bal = (p1_brok_bal + p1_brok_in) * (1.0 + ret_brok)
+                    growth_p1_brok = (p1_brok_bal + p1_brok_in) * ret_brok
+                    growth_p2_brok = (p2_brok_bal + p2_brok_in) * ret_brok if not is_single else 0.0
+                    p1_brok_bal += p1_brok_in + growth_p1_brok
                     p1_brok_basis += p1_brok_in
-                    p2_brok_bal = (p2_brok_bal + p2_brok_in) * (1.0 + ret_brok) if not is_single else 0.0
+                    p2_brok_bal += p2_brok_in + growth_p2_brok if not is_single else 0.0
                     p2_brok_basis += p2_brok_in
 
                     pre_tax_in_yr = p1_trad_in + p2_trad_in
@@ -1128,12 +1142,16 @@ if not getattr(sys, 'testing', False):
                     if net_ss >= current_spend:
                         surplus = net_ss - current_spend
                         brok_in_yr += surplus
-                        brok_tot = p1_brok_bal + p2_brok_bal
-                        p1_ratio = p1_brok_bal / brok_tot if brok_tot > 0 else 0.5
-                        p1_brok_bal += surplus * p1_ratio
-                        p1_brok_basis += surplus * p1_ratio
-                        p2_brok_bal += surplus * (1.0 - p1_ratio)
-                        p2_brok_basis += surplus * (1.0 - p1_ratio)
+                        if is_single:
+                            p1_brok_bal += surplus
+                            p1_brok_basis += surplus
+                        else:
+                            brok_tot = p1_brok_bal + p2_brok_bal
+                            p1_ratio = p1_brok_bal / brok_tot if brok_tot > 0 else 0.5
+                            p1_brok_bal += surplus * p1_ratio
+                            p1_brok_basis += surplus * p1_ratio
+                            p2_brok_bal += surplus * (1.0 - p1_ratio)
+                            p2_brok_basis += surplus * (1.0 - p1_ratio)
                         total_tax_living += base_tax_fed
                     else:
                         total_tax_living += base_tax_fed
@@ -1231,12 +1249,20 @@ if not getattr(sys, 'testing', False):
                                 total_tax_brokerage += irmaa_cg_fed
                                 total_state_tax_retired += irmaa_cg_state
 
-                    p1_trad_bal *= (1.0 + ret_trad)
-                    p2_trad_bal *= (1.0 + ret_trad)
-                    p1_roth_bal *= (1.0 + ret_roth)
-                    p2_roth_bal *= (1.0 + ret_roth)
-                    p1_brok_bal *= (1.0 + ret_brok)
-                    p2_brok_bal *= (1.0 + ret_brok)
+                    growth_p1_trad = p1_trad_bal * ret_trad
+                    growth_p2_trad = p2_trad_bal * ret_trad if not is_single else 0.0
+                    growth_p1_roth = p1_roth_bal * ret_roth
+                    growth_p2_roth = p2_roth_bal * ret_roth if not is_single else 0.0
+                    growth_p1_brok = p1_brok_bal * ret_brok
+                    growth_p2_brok = p2_brok_bal * ret_brok if not is_single else 0.0
+
+                    p1_trad_bal += growth_p1_trad
+                    p2_trad_bal += growth_p2_trad
+                    p1_roth_bal += growth_p1_roth
+                    p2_roth_bal += growth_p2_roth
+                    p1_brok_bal += growth_p1_brok
+                    p2_brok_bal += growth_p2_brok
+
                     status_label = "Phase 1 (Penalty)"
                 else:
                     if use_ss and age >= p1_ss_age:
@@ -1295,27 +1321,38 @@ if not getattr(sys, 'testing', False):
                             roth_in_yr = max(0.0, min(surplus, net_trad_yield))
                             brok_in_yr = surplus - roth_in_yr
 
-                            p1_roth_bal += roth_in_yr / 2.0
-                            p2_roth_bal += roth_in_yr / 2.0
+                            if is_single:
+                                p1_roth_bal += roth_in_yr
+                            else:
+                                p1_roth_bal += roth_in_yr / 2.0
+                                p2_roth_bal += roth_in_yr / 2.0
                             total_roth_conv_net += roth_in_yr
 
                             total_tax_roth += trad_tax_fed * (
                                         roth_in_yr / net_trad_and_ss) if net_trad_and_ss > 0 else 0.0
 
                             if brok_in_yr > 0:
+                                if is_single:
+                                    p1_brok_bal += brok_in_yr
+                                    p1_brok_basis += brok_in_yr
+                                else:
+                                    brok_tot = p1_brok_bal + p2_brok_bal
+                                    p1_ratio = p1_brok_bal / brok_tot if brok_tot > 0 else 0.5
+                                    p1_brok_bal += brok_in_yr * p1_ratio
+                                    p1_brok_basis += brok_in_yr * p1_ratio
+                                    p2_brok_bal += brok_in_yr * (1.0 - p1_ratio)
+                                    p2_brok_basis += brok_in_yr * (1.0 - p1_ratio)
+                        else:
+                            if is_single:
+                                p1_brok_bal += surplus
+                                p1_brok_basis += surplus
+                            else:
                                 brok_tot = p1_brok_bal + p2_brok_bal
                                 p1_ratio = p1_brok_bal / brok_tot if brok_tot > 0 else 0.5
-                                p1_brok_bal += brok_in_yr * p1_ratio
-                                p1_brok_basis += brok_in_yr * p1_ratio
-                                p2_brok_bal += brok_in_yr * (1.0 - p1_ratio)
-                                p2_brok_basis += brok_in_yr * (1.0 - p1_ratio)
-                        else:
-                            brok_tot = p1_brok_bal + p2_brok_bal
-                            p1_ratio = p1_brok_bal / brok_tot if brok_tot > 0 else 0.5
-                            p1_brok_bal += surplus * p1_ratio
-                            p1_brok_basis += surplus * p1_ratio
-                            p2_brok_bal += surplus * (1.0 - p1_ratio)
-                            p2_brok_basis += surplus * (1.0 - p1_ratio)
+                                p1_brok_bal += surplus * p1_ratio
+                                p1_brok_basis += surplus * p1_ratio
+                                p2_brok_bal += surplus * (1.0 - p1_ratio)
+                                p2_brok_basis += surplus * (1.0 - p1_ratio)
 
                             brok_in_yr = surplus
                             total_rmd_overflow_net += surplus
@@ -1373,19 +1410,30 @@ if not getattr(sys, 'testing', False):
                                 total_tax_brokerage += irmaa_cg_fed
                                 total_state_tax_retired += irmaa_cg_state
 
-                    p1_trad_bal *= (1.0 + ret_trad)
-                    p2_trad_bal *= (1.0 + ret_trad)
-                    p1_roth_bal *= (1.0 + ret_roth)
-                    p2_roth_bal *= (1.0 + ret_roth)
-                    p1_brok_bal *= (1.0 + ret_brok)
-                    p2_brok_bal *= (1.0 + ret_brok)
+                    growth_p1_trad = p1_trad_bal * ret_trad
+                    growth_p2_trad = p2_trad_bal * ret_trad if not is_single else 0.0
+                    growth_p1_roth = p1_roth_bal * ret_roth
+                    growth_p2_roth = p2_roth_bal * ret_roth if not is_single else 0.0
+                    growth_p1_brok = p1_brok_bal * ret_brok
+                    growth_p2_brok = p2_brok_bal * ret_brok if not is_single else 0.0
+
+                    p1_trad_bal += growth_p1_trad
+                    p2_trad_bal += growth_p2_trad
+                    p1_roth_bal += growth_p1_roth
+                    p2_roth_bal += growth_p2_roth
+                    p1_brok_bal += growth_p1_brok
+                    p2_brok_bal += growth_p2_brok
+
                     status_label = "Phase 2 (Levelized)" if age < rmd_start_age else "Phase 3 (RMDs)"
+
+                total_growth_yr = growth_p1_trad + growth_p2_trad + growth_p1_roth + growth_p2_roth + growth_p1_brok + growth_p2_brok
 
                 if return_data and not mc_mode and age <= target_lifespan:
                     ret_display = f"{b_trad_ret * 100:.1f}%" if asset_strategy == "Unified Portfolio" else f"T:{b_trad_ret * 100:.1f}% | R:{b_roth_ret * 100:.1f}% | B:{b_brok_ret * 100:.1f}%"
 
                     sim_data.append([
-                        age, status_label, ret_display, round(current_spend),
+                        age, status_label, ret_display, round(start_year_total_bal), round(current_spend),
+                        round(total_growth_yr),
                         round(p1_trad_bal), round(p2_trad_bal), round(p1_roth_bal), round(p2_roth_bal),
                         round(p1_brok_bal), round(p2_brok_bal),
                         round(pre_tax_in_yr), round(pre_tax_out_yr),
@@ -1460,7 +1508,8 @@ if not getattr(sys, 'testing', False):
         # SECTION 7: LIFETIME SUMMARY & KPIS
         # ==========================================
         df = pd.DataFrame(sim_data, columns=[
-            "Age", "Status", "Effective Return(s)", "Net Spend Target",
+            "Age", "Status", "Effective Return(s)", "Beginning Balance", "Net Spend Target",
+            "Investment Growth",
             "P1 Pre-Tax", "P2 Pre-Tax", "P1 Post-Tax (Roth)", "P2 Post-Tax (Roth)",
             "P1 Brokerage", "P2 Brokerage",
             "Pre-Tax Additions", "Pre-Tax Withdrawals",
@@ -1713,4 +1762,3 @@ if not getattr(sys, 'testing', False):
                         labels={"index": "Age", "value": "Total Portfolio Balance ($)", "variable": "Scenario Outcome"}
                     )
                     st.plotly_chart(fig_mc, use_container_width=True)
-                    #Adding to Commit
