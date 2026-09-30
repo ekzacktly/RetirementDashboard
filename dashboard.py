@@ -22,104 +22,6 @@ US_STATES = [
     "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota", "Mississippi",
     "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire", "New Jersey", "New Mexico",
     "New York", "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon", "Pennsylvania",
-    "RhHere is the fully updated `dashboard.py` file.
-
-    The underlying simulation math remains identical, but the final dataframe assembly has been completely rebuilt to
-    act as a ** cash - flow
-rollforward
-table **.
-
-### How the Table Now Flows
-1. ** Context: ** Age, Status, Returns, and Target
-Spend.
-2. ** Account
-Buckets(Trad, Roth, Brokerage): ** For
-each
-bucket, you
-now
-see
-the
-exact
-lifecycle
-of
-the
-money
-inside
-that
-specific
-year:
-*`Beginning
-Balance
-` $\rightarrow$ `+ Additions` $\rightarrow$ `- Withdrawals` $\rightarrow$ `+ Investment
-Growth
-` $\rightarrow$ `Ending
-Balance
-`
-3. ** Social
-Security: ** Placed
-right
-after
-the
-portfolios
-to
-show
-how
-much
-outside
-cash
-was
-received.
-4. ** Total
-Portfolio
-Rollforward: ** Summarizes
-the
-entire
-household
-'s wealth using the exact same Beginning $\rightarrow$ In $\rightarrow$ Out $\rightarrow$ Growth $\rightarrow$ Ending structure. *(Note: If you do a Roth conversion, you will clearly see the money exit the "Trad Withdrawals" column and enter the "Roth Additions" column, balancing perfectly in the Totals).*
-5. ** The
-IRS
-Bill: ** The
-final
-columns
-track
-every
-headwind
-your
-money
-faced
-that
-year(RMDs
-triggered, Ordinary
-Tax, Cap
-Gains, State
-Tax, IRMAA, and the
-10 % Penalty).
-
-```python
-import streamlit as st
-import pandas as pd
-import scipy.optimize as opt
-import numpy_financial as npf
-import plotly.express as px
-import numpy as np
-import json
-import os
-import sys
-import uuid
-from typing import List, Dict, Union, Any, Tuple
-
-# Hide sidebar by default
-st.set_page_config(page_title="Retirement Dashboard", layout="wide", initial_sidebar_state="collapsed")
-
-# ==========================================
-# CONSTANTS & CONFIGURATION LOADER
-# ==========================================
-US_STATES = [
-    "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Delaware",
-    "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky",
-    "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota", "Mississippi",
-    "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire", "New Jersey", "New Mexico",
-    "New York", "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon", "Pennsylvania",
     "Rhode Island", "South Carolina", "South Dakota", "Tennessee", "Texas", "Utah", "Vermont",
     "Virginia", "Washington", "West Virginia", "Wisconsin", "Wyoming"
 ]
@@ -170,11 +72,10 @@ config = {
     "p2_brok_start": 2000, "p2_brok_mo": 0
 }
 
+
 # ==========================================
 # HELPER FUNCTIONS & IRS TAX ENGINE
 # ==========================================
-
-
 def estimate_pia(salary: float) -> float:
     aime = salary / 12.0
     if aime <= 1286.0:
@@ -1802,7 +1703,42 @@ if not getattr(sys, 'testing', False):
         st.dataframe(df, use_container_width=True)
 
     # ==========================================
-    # MONTE CARLO TAB
+    # TAB 2: USER MANUAL
+    # ==========================================
+    with tab2:
+        st.header("📖 User Manual & Explainer")
+        st.markdown("""
+        ### How to use this dashboard
+        This tool mathematically simulates your accumulation and decumulation strategy through end-of-life to optimize asset location and prevent unnecessary taxation.
+
+        #### 1. Setup Your Base Case
+        Begin by defining your basic global rules, including household size, inflation assumptions, and the account buckets you actively use. Then, establish your salaries and standard account balances.
+
+        #### 2. The Three Phases of Decumulation
+        The engine automatically models three distinct regulatory phases of retirement:
+        * **Phase 1 (Penalty Years):** Before age 59½ (or 55 if utilizing the Rule of 55), the engine actively protects your pre-tax assets by prioritizing Roth and Brokerage drawdowns to avoid the IRS 10% early withdrawal excise tax.
+        * **Phase 2 (Levelized Drawdown):** Once the penalty drops off, the engine calculates a levelized amortization of your pre-tax (Traditional) balance over your remaining life expectancy. This guarantees you drain the pre-tax bucket steadily, avoiding future tax bracket creep. Any excess funds withdrawn are automatically swept into your Roth account as a **Roth Conversion**.
+        * **Phase 3 (RMDs):** At age 75, the IRS mandates Required Minimum Distributions based on their life-expectancy tables. If these forced distributions exceed your lifestyle needs, the engine sweeps the excess directly into your Taxable Brokerage, where it builds a new cost basis.
+
+        #### 3. Analyzing the Cash Flow Rollforward
+        The table at the bottom of the main dashboard tracks the exact flow of every dollar in any given year. For each account bucket, it displays the math identically:
+        `Beginning Balance` + `Additions` - `Withdrawals` + `Investment Growth` = `Ending Balance`
+        """)
+
+    # ==========================================
+    # TAB 3: THE FINANCIAL STORY
+    # ==========================================
+    with tab3:
+        st.header("📜 The Financial Story")
+        st.info(
+            "🚧 This module is currently under construction and will be reworked in a future update. Check back soon!")
+
+        # [COMMENTED OUT LEGACY CODE FOR FUTURE REWORK]
+        # if not df.empty:
+        #    ...
+
+    # ==========================================
+    # TAB 4: MONTE CARLO TAB
     # ==========================================
     with tab4:
         st.title("🎲 Monte Carlo Stress Test")
