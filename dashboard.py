@@ -22,6 +22,104 @@ US_STATES = [
     "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota", "Mississippi",
     "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire", "New Jersey", "New Mexico",
     "New York", "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon", "Pennsylvania",
+    "RhHere is the fully updated `dashboard.py` file.
+
+    The underlying simulation math remains identical, but the final dataframe assembly has been completely rebuilt to
+    act as a ** cash - flow
+rollforward
+table **.
+
+### How the Table Now Flows
+1. ** Context: ** Age, Status, Returns, and Target
+Spend.
+2. ** Account
+Buckets(Trad, Roth, Brokerage): ** For
+each
+bucket, you
+now
+see
+the
+exact
+lifecycle
+of
+the
+money
+inside
+that
+specific
+year:
+*`Beginning
+Balance
+` $\rightarrow$ `+ Additions` $\rightarrow$ `- Withdrawals` $\rightarrow$ `+ Investment
+Growth
+` $\rightarrow$ `Ending
+Balance
+`
+3. ** Social
+Security: ** Placed
+right
+after
+the
+portfolios
+to
+show
+how
+much
+outside
+cash
+was
+received.
+4. ** Total
+Portfolio
+Rollforward: ** Summarizes
+the
+entire
+household
+'s wealth using the exact same Beginning $\rightarrow$ In $\rightarrow$ Out $\rightarrow$ Growth $\rightarrow$ Ending structure. *(Note: If you do a Roth conversion, you will clearly see the money exit the "Trad Withdrawals" column and enter the "Roth Additions" column, balancing perfectly in the Totals).*
+5. ** The
+IRS
+Bill: ** The
+final
+columns
+track
+every
+headwind
+your
+money
+faced
+that
+year(RMDs
+triggered, Ordinary
+Tax, Cap
+Gains, State
+Tax, IRMAA, and the
+10 % Penalty).
+
+```python
+import streamlit as st
+import pandas as pd
+import scipy.optimize as opt
+import numpy_financial as npf
+import plotly.express as px
+import numpy as np
+import json
+import os
+import sys
+import uuid
+from typing import List, Dict, Union, Any, Tuple
+
+# Hide sidebar by default
+st.set_page_config(page_title="Retirement Dashboard", layout="wide", initial_sidebar_state="collapsed")
+
+# ==========================================
+# CONSTANTS & CONFIGURATION LOADER
+# ==========================================
+US_STATES = [
+    "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Delaware",
+    "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky",
+    "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota", "Mississippi",
+    "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire", "New Jersey", "New Mexico",
+    "New York", "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon", "Pennsylvania",
     "Rhode Island", "South Carolina", "South Dakota", "Tennessee", "Texas", "Utah", "Vermont",
     "Virginia", "Washington", "West Virginia", "Wisconsin", "Wyoming"
 ]
@@ -72,10 +170,11 @@ config = {
     "p2_brok_start": 2000, "p2_brok_mo": 0
 }
 
-
 # ==========================================
 # HELPER FUNCTIONS & IRS TAX ENGINE
 # ==========================================
+
+
 def estimate_pia(salary: float) -> float:
     aime = salary / 12.0
     if aime <= 1286.0:
@@ -558,9 +657,29 @@ if not getattr(sys, 'testing', False):
         st.markdown("---")
 
         # ==========================================
-        # SECTION 2: MACRO ASSUMPTIONS & GOALS
+        # SECTION 2: BASE SALARIES
         # ==========================================
-        st.header("2. Macro Assumptions & Goals")
+        st.header("2. Base Salaries")
+        col2a, col2b = st.columns(2)
+        with col2a:
+            p1_salary = st.number_input("Person 1 Salary ($)", value=float(config["p1_salary"]), step=5000.0,
+                                        help="Gross annual salary for Person 1.")
+            p1_annual_raise = st.number_input("P1 Annual Raise (%)", value=float(config.get("p1_annual_raise", 2.5)),
+                                              step=0.1,
+                                              help="Expected annual percentage increase in wage income for Person 1.") / 100.0
+        with col2b:
+            p2_salary = st.number_input("Person 2 Salary ($)", value=float(config["p2_salary"]), step=5000.0,
+                                        disabled=is_single, help="Gross annual salary for Person 2.")
+            p2_annual_raise = st.number_input("P2 Annual Raise (%)", value=float(config.get("p2_annual_raise", 2.5)),
+                                              step=0.1, disabled=is_single,
+                                              help="Expected annual percentage increase in wage income for Person 2.") / 100.0
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # ==========================================
+        # SECTION 3: MACRO ASSUMPTIONS & GOALS
+        # ==========================================
+        st.header("3. Macro Assumptions & Goals")
 
         mac1, mac2, mac3, mac4 = st.columns(4)
         with mac1:
@@ -597,18 +716,15 @@ if not getattr(sys, 'testing', False):
             else:
                 ss_multiplier_base = 0.74
 
-            p1_salary_base = float(config.get("p1_salary", 70000.0))
-            p2_salary_base = float(config.get("p2_salary", 65000.0))
-
             ss_col1, ss_col2 = st.columns(2)
             with ss_col1:
                 st.markdown("#### Person 1")
-                p1_est_pia = estimate_pia(p1_salary_base)
+                p1_est_pia = estimate_pia(p1_salary)
                 p1_fra_benefit = st.number_input(
                     "P1 FRA Base Benefit ($/mo)",
                     value=int(config.get("p1_fra_benefit", int(p1_est_pia))),
                     step=100,
-                    help=f"Your Primary Insurance Amount (PIA) at exactly age 67. Based on your current salary of \\${p1_salary_base:,.0f}, an IRS Bend Point estimate is \\${int(p1_est_pia):,.0f}/mo. The engine uses this purely as a starting base—it will mathematically reduce or increase this amount based on your Claiming Age slider below."
+                    help=f"Your Primary Insurance Amount (PIA) at exactly age 67. Based on your current salary of \\${p1_salary:,.0f}, an IRS Bend Point estimate is \\${int(p1_est_pia):,.0f}/mo. The engine uses this purely as a starting base—it will mathematically reduce or increase this amount based on your Claiming Age slider below."
                 )
                 p1_ss_age = st.slider(
                     "P1 Claiming Age",
@@ -625,12 +741,12 @@ if not getattr(sys, 'testing', False):
                     p2_final_mo = 0.0
                 else:
                     st.markdown("#### Person 2")
-                    p2_est_pia = estimate_pia(p2_salary_base)
+                    p2_est_pia = estimate_pia(p2_salary)
                     p2_fra_benefit = st.number_input(
                         "P2 FRA Base Benefit ($/mo)",
                         value=int(config.get("p2_fra_benefit", int(p2_est_pia))),
                         step=100,
-                        help=f"Your Primary Insurance Amount (PIA) at exactly age 67. Based on your current salary of \\${p2_salary_base:,.0f}, an IRS Bend Point estimate is \\${int(p2_est_pia):,.0f}/mo. The engine uses this purely as a starting base—it will mathematically reduce or increase this amount based on your Claiming Age slider below."
+                        help=f"Your Primary Insurance Amount (PIA) at exactly age 67. Based on your current salary of \\${p2_salary:,.0f}, an IRS Bend Point estimate is \\${int(p2_est_pia):,.0f}/mo. The engine uses this purely as a starting base—it will mathematically reduce or increase this amount based on your Claiming Age slider below."
                     )
                     p2_ss_age = st.slider(
                         "P2 Claiming Age",
@@ -722,26 +838,6 @@ if not getattr(sys, 'testing', False):
             unified_glide_profile = "Safe (Standard TDF)"
 
         st.markdown("---")
-
-        # ==========================================
-        # SECTION 3: BASE SALARIES
-        # ==========================================
-        st.header("3. Base Salaries")
-        col2a, col2b = st.columns(2)
-        with col2a:
-            p1_salary = st.number_input("Person 1 Salary ($)", value=float(config["p1_salary"]), step=5000.0,
-                                        help="Gross annual salary for Person 1.")
-            p1_annual_raise = st.number_input("P1 Annual Raise (%)", value=float(config.get("p1_annual_raise", 2.5)),
-                                              step=0.1,
-                                              help="Expected annual percentage increase in wage income for Person 1.") / 100.0
-        with col2b:
-            p2_salary = st.number_input("Person 2 Salary ($)", value=float(config["p2_salary"]), step=5000.0,
-                                        disabled=is_single, help="Gross annual salary for Person 2.")
-            p2_annual_raise = st.number_input("P2 Annual Raise (%)", value=float(config.get("p2_annual_raise", 2.5)),
-                                              step=0.1, disabled=is_single,
-                                              help="Expected annual percentage increase in wage income for Person 2.") / 100.0
-
-        st.markdown("<br>", unsafe_allow_html=True)
 
         # ==========================================
         # SECTION 4: PRE-TAX ACCOUNTS (TRADITIONAL 401K & IRA)
@@ -1038,11 +1134,11 @@ if not getattr(sys, 'testing', False):
 
                 inf_mult = (1.0 + cpi_rate) ** (age - current_age) if use_cpi else 1.0
 
-                trad_bal_tot = p1_trad_bal + p2_trad_bal
-                roth_bal_tot = p1_roth_bal + p2_roth_bal
-                brok_bal_tot = p1_brok_bal + p2_brok_bal
-
-                start_year_total_bal = trad_bal_tot + roth_bal_tot + brok_bal_tot
+                # Capture Beginning Balances before any operations occur this year
+                trad_bal_tot_start = p1_trad_bal + p2_trad_bal
+                roth_bal_tot_start = p1_roth_bal + p2_roth_bal
+                brok_bal_tot_start = p1_brok_bal + p2_brok_bal
+                start_year_total_bal = trad_bal_tot_start + roth_bal_tot_start + brok_bal_tot_start
 
                 if mc_mode:
                     mc_balance_history.append(start_year_total_bal)
@@ -1053,9 +1149,9 @@ if not getattr(sys, 'testing', False):
                 if age == retire_age or (age == current_age and current_age >= retire_age):
                     port_at_retire = start_year_total_bal
                     ret_balances_dict = {
-                        "P1 Pre-Tax": p1_trad_bal, "P2 Pre-Tax": p2_trad_bal,
-                        "P1 Post-Tax (Roth)": p1_roth_bal, "P2 Post-Tax (Roth)": p2_roth_bal,
-                        "P1 Brokerage": p1_brok_bal, "P2 Brokerage": p2_brok_bal
+                        "Trad Ending": trad_bal_tot_start,
+                        "Roth Ending": roth_bal_tot_start,
+                        "Brok Ending": brok_bal_tot_start
                     }
 
                 b_trad_ret = get_glide_return_custom(age, retire_age, pre_ret_trad, post_ret_trad, trad_glide_profile)
@@ -1156,7 +1252,7 @@ if not getattr(sys, 'testing', False):
                     else:
                         total_tax_living += base_tax_fed
                         shortfall = current_spend - net_ss
-                        take_roth = min(roth_bal_tot, shortfall)
+                        take_roth = min(roth_bal_tot_start, shortfall)
                         r1, r2 = withdraw_proportional(take_roth, p1_roth_bal, p2_roth_bal)
                         p1_roth_bal -= r1
                         p2_roth_bal -= r2
@@ -1180,7 +1276,7 @@ if not getattr(sys, 'testing', False):
                             total_tax_brokerage += brok_tax_fed
                             total_state_tax_retired += brok_tax_state
 
-                        if shortfall > 0 and trad_bal_tot > 0:
+                        if shortfall > 0 and trad_bal_tot_start > 0:
                             def yield_trad(g: float) -> float:
                                 new_taxable_ss = calc_taxable_ss(ss_yr, ordinary_gross + g + gains_realized, is_single)
                                 new_ord_tax = calc_fed_tax(ordinary_gross + g + new_taxable_ss, inf_mult, is_single)
@@ -1195,9 +1291,9 @@ if not getattr(sys, 'testing', False):
                             try:
                                 res = opt.root_scalar(lambda g: yield_trad(g) - shortfall,
                                                       bracket=[shortfall, shortfall * 3.0])
-                                take_trad = min(trad_bal_tot, float(res.root))
+                                take_trad = min(trad_bal_tot_start, float(res.root))
                             except ValueError:
-                                take_trad = min(trad_bal_tot, shortfall * 1.5)
+                                take_trad = min(trad_bal_tot_start, shortfall * 1.5)
 
                             t1, t2 = withdraw_proportional(take_trad, p1_trad_bal, p2_trad_bal)
                             p1_trad_bal -= t1
@@ -1278,16 +1374,16 @@ if not getattr(sys, 'testing', False):
                         years_remaining = max(1, 120 - age + 1)
 
                     pmt = (-npf.pmt(b_trad_ret, years_remaining,
-                                    trad_bal_tot / inf_mult) * inf_mult) if trad_bal_tot > 0 else 0.0
+                                    trad_bal_tot_start / inf_mult) * inf_mult) if trad_bal_tot_start > 0 else 0.0
 
                     rmd = 0.0
-                    if age >= rmd_start_age and trad_bal_tot > 0:
-                        rmd = trad_bal_tot / get_rmd_divisor(age)
+                    if age >= rmd_start_age and trad_bal_tot_start > 0:
+                        rmd = trad_bal_tot_start / get_rmd_divisor(age)
                         rmd_amt_yr = rmd
 
                     gross_need = get_gross_for_net_total(current_spend, ss_yr, state_tax_decimal, state_exempts_ret,
                                                          is_single, inf_mult, False, 0.0)
-                    gross_trad = min(trad_bal_tot, max(rmd, float(pmt), gross_need))
+                    gross_trad = min(trad_bal_tot_start, max(rmd, float(pmt), gross_need))
                     pre_tax_out_yr = gross_trad
                     ordinary_gross = gross_trad
 
@@ -1362,7 +1458,7 @@ if not getattr(sys, 'testing', False):
                         total_state_tax_retired += trad_tax_state
 
                         shortfall = current_spend - net_trad_and_ss
-                        take_roth = min(roth_bal_tot, shortfall)
+                        take_roth = min(roth_bal_tot_start, shortfall)
                         r1, r2 = withdraw_proportional(take_roth, p1_roth_bal, p2_roth_bal)
                         p1_roth_bal -= r1
                         p2_roth_bal -= r2
@@ -1426,25 +1522,44 @@ if not getattr(sys, 'testing', False):
 
                     status_label = "Phase 2 (Levelized)" if age < rmd_start_age else "Phase 3 (RMDs)"
 
-                total_growth_yr = growth_p1_trad + growth_p2_trad + growth_p1_roth + growth_p2_roth + growth_p1_brok + growth_p2_brok
+                # End of year totals mapping
+                trad_bal_tot_end = p1_trad_bal + p2_trad_bal
+                roth_bal_tot_end = p1_roth_bal + p2_roth_bal
+                brok_bal_tot_end = p1_brok_bal + p2_brok_bal
+                end_year_total_bal = trad_bal_tot_end + roth_bal_tot_end + brok_bal_tot_end
+
+                trad_growth_tot = growth_p1_trad + growth_p2_trad
+                roth_growth_tot = growth_p1_roth + growth_p2_roth
+                brok_growth_tot = growth_p1_brok + growth_p2_brok
+                total_growth_yr = trad_growth_tot + roth_growth_tot + brok_growth_tot
+
+                total_in_yr = pre_tax_in_yr + roth_in_yr + brok_in_yr
+                total_out_yr = pre_tax_out_yr + roth_out_yr + brok_out_yr
 
                 if return_data and not mc_mode and age <= target_lifespan:
                     ret_display = f"{b_trad_ret * 100:.1f}%" if asset_strategy == "Unified Portfolio" else f"T:{b_trad_ret * 100:.1f}% | R:{b_roth_ret * 100:.1f}% | B:{b_brok_ret * 100:.1f}%"
 
                     sim_data.append([
-                        age, status_label, ret_display, round(start_year_total_bal), round(current_spend),
-                        round(total_growth_yr),
-                        round(p1_trad_bal), round(p2_trad_bal), round(p1_roth_bal), round(p2_roth_bal),
-                        round(p1_brok_bal), round(p2_brok_bal),
-                        round(pre_tax_in_yr), round(pre_tax_out_yr),
-                        round(roth_in_yr), round(roth_out_yr),
-                        round(brok_in_yr), round(brok_out_yr), round(ss_yr),
-                        round(rmd_amt_yr), round(irmaa_yr), round(fed_tax_paid_yr), round(state_tax_paid_yr),
-                        round(cg_tax_paid_yr), round(penalty_paid_yr)
+                        age, status_label, ret_display, round(current_spend),
+
+                        round(trad_bal_tot_start), round(pre_tax_in_yr), round(pre_tax_out_yr), round(trad_growth_tot),
+                        round(trad_bal_tot_end),
+                        round(roth_bal_tot_start), round(roth_in_yr), round(roth_out_yr), round(roth_growth_tot),
+                        round(roth_bal_tot_end),
+                        round(brok_bal_tot_start), round(brok_in_yr), round(brok_out_yr), round(brok_growth_tot),
+                        round(brok_bal_tot_end),
+
+                        round(ss_yr),
+
+                        round(start_year_total_bal), round(total_in_yr), round(total_out_yr), round(total_growth_yr),
+                        round(end_year_total_bal),
+
+                        round(rmd_amt_yr), round(fed_tax_paid_yr), round(cg_tax_paid_yr), round(state_tax_paid_yr),
+                        round(irmaa_yr), round(penalty_paid_yr)
                     ])
 
                 if age == target_lifespan:
-                    ending_bal = p1_trad_bal + p2_trad_bal + p1_roth_bal + p2_roth_bal + p1_brok_bal + p2_brok_bal
+                    ending_bal = end_year_total_bal
                     if mc_mode:
                         return mc_balance_history
                     if return_data:
@@ -1508,27 +1623,20 @@ if not getattr(sys, 'testing', False):
         # SECTION 7: LIFETIME SUMMARY & KPIS
         # ==========================================
         df = pd.DataFrame(sim_data, columns=[
-            "Age", "Status", "Effective Return(s)", "Beginning Balance", "Net Spend Target",
-            "Investment Growth",
-            "P1 Pre-Tax", "P2 Pre-Tax", "P1 Post-Tax (Roth)", "P2 Post-Tax (Roth)",
-            "P1 Brokerage", "P2 Brokerage",
-            "Pre-Tax Additions", "Pre-Tax Withdrawals",
-            "Roth Additions", "Roth Withdrawals",
-            "Brokerage Additions", "Brokerage Withdrawals", "Social Security",
-            "RMD Amount", "IRMAA Surcharge", "Fed Ordinary Tax", "State Tax", "Fed Cap Gains Tax", "10% Penalty"
+            "Age", "Status", "Effective Return(s)", "Net Spend Target",
+
+            "Trad Beginning", "Trad Additions", "Trad Withdrawals", "Trad Growth", "Trad Ending",
+            "Roth Beginning", "Roth Additions", "Roth Withdrawals", "Roth Growth", "Roth Ending",
+            "Brok Beginning", "Brok Additions", "Brok Withdrawals", "Brok Growth", "Brok Ending",
+
+            "SS Received",
+
+            "Total Beginning", "Total Additions", "Total Withdrawals", "Total Growth", "Total Ending",
+
+            "RMD Amount", "Fed Ordinary Tax", "Fed Cap Gains Tax", "State Tax", "IRMAA Surcharge", "10% Penalty"
         ])
 
-        if is_single:
-            if "P2 Pre-Tax" in df.columns:
-                df.drop(columns=["P2 Pre-Tax", "P2 Post-Tax (Roth)", "P2 Brokerage"], inplace=True)
-                df['Total_Bal'] = df['P1 Pre-Tax'] + df['P1 Post-Tax (Roth)'] + df['P1 Brokerage']
-        else:
-            if "P2 Pre-Tax" in df.columns:
-                df['Total_Bal'] = df['P1 Pre-Tax'] + df['P2 Pre-Tax'] + df['P1 Post-Tax (Roth)'] + df[
-                    'P2 Post-Tax (Roth)'] + \
-                                  df['P1 Brokerage'] + df['P2 Brokerage']
-
-        end_of_life_balance = df[df['Age'] == target_lifespan]['Total_Bal'].iloc[0] if not df.empty else 0.0
+        end_of_life_balance = df[df['Age'] == target_lifespan]['Total Ending'].iloc[0] if not df.empty else 0.0
 
         st.header("7. Lifetime Summary & KPIs")
 
@@ -1674,14 +1782,13 @@ if not getattr(sys, 'testing', False):
         st.markdown("---")
         st.subheader("Account Balances Over Time")
 
-        y_cols = ["P1 Pre-Tax", "P1 Post-Tax (Roth)", "P1 Brokerage"]
-        if not is_single:
-            y_cols.extend(["P2 Pre-Tax", "P2 Post-Tax (Roth)", "P2 Brokerage"])
-
-        y_cols.sort(key=lambda x: retire_balances_dict_val.get(x, 0.0), reverse=True)
+        y_cols = ["Trad Ending", "Roth Ending", "Brok Ending"]
 
         chart_data = df[["Age"] + y_cols] if not df.empty else pd.DataFrame()
         if not chart_data.empty:
+            final_row = df.iloc[-1]
+            y_cols.sort(key=lambda x: final_row[x], reverse=True)
+
             fig = px.area(
                 chart_data, x="Age", y=y_cols,
                 labels={"value": "Account Balance ($)", "variable": "Account Bucket"}
@@ -1692,7 +1799,7 @@ if not getattr(sys, 'testing', False):
         # SECTION 8: LIFETIME PROJECTION & AUTOMATED WATERFALL
         # ==========================================
         st.subheader("8. Lifetime Projection & Automated Waterfall")
-        st.dataframe(df.drop(columns=['Total_Bal']) if not df.empty else df, use_container_width=True)
+        st.dataframe(df, use_container_width=True)
 
     # ==========================================
     # MONTE CARLO TAB
