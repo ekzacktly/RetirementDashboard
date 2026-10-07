@@ -994,18 +994,6 @@ if not getattr(sys, 'testing', False):
             Higher returns increase projected wealth, but they also increase sequence-of-returns risk. Use the Monte Carlo tab to stress test aggressive assumptions.
             """)
 
-        with st.expander(" Benchmark Guide: What returns should I expect?"):
-            st.markdown("""
-            **Account types do not produce returns; the assets inside them do.**  
-            Since this model removes inflation using *Real Returns*, here are historical benchmarks:
-
-            | Optimal Asset Mix | Historical Real Return | Best For... |
-            | :--- | :--- | :--- |
-            | **100% Equities** | **6.5% – 8.0%** | Roth Accounts (Max tax-free growth, no RMDs) |
-            | **80/20 or Stock ETFs** | **5.5% – 7.0%** | Brokerage Accounts (Capital gains efficiency) |
-            | **60/40 or Bonds** | **3.5% – 5.5%** | Traditional Accounts (Slows RMD tax bombs) |
-            """)
-
         asset_strategy = st.radio(
             "Return Assumption Strategy",
             ["Unified Portfolio", "Asset Location (By Tax Bucket)"],
@@ -2520,6 +2508,190 @@ if not getattr(sys, 'testing', False):
         st.markdown("<br>", unsafe_allow_html=True)
 
         # SUBSECTION: CURRENT TAX & PAYCHECK ARBITRAGE
+        st.subheader("Current Tax & Paycheck Arbitrage")
+
+        paycheck_frequency = st.selectbox(
+            "Paycheck Frequency",
+            ["Monthly (12/yr)", "Semi-Monthly (24/yr)", "Biweekly (26/yr)", "Weekly (52/yr)"],
+            index=2,
+            help="Used to translate annual tax differences into per-paycheck and monthly cash-flow impact."
+        )
+
+        if paycheck_frequency == "Monthly (12/yr)":
+            paychecks_per_year = 12
+        elif paycheck_frequency == "Semi-Monthly (24/yr)":
+            paychecks_per_year = 24
+        elif paycheck_frequency == "Weekly (52/yr)":
+            paychecks_per_year = 52
+        else:
+            paychecks_per_year = 26
+
+        gross_wage_total = p1_salary + (p2_salary if not is_single else 0.0)
+
+        current_trad_401k_employee = p1_salary * p1_trad_401k_cont
+        if not is_single:
+            current_trad_401k_employee += p2_salary * p2_trad_401k_cont
+
+        current_trad_ira_annual = p1_trad_ira_mo * 12.0
+        if not is_single:
+            current_trad_ira_annual += p2_trad_ira_mo * 12.0
+
+        current_pre_tax_deductions_now = current_trad_401k_employee + current_trad_ira_annual
+
+        # Current federal taxes with existing Traditional contributions.
+        taxable_gross_now = max(0.0, gross_wage_total - current_pre_tax_deductions_now)
+        actual_fed_tax_now = calc_fed_tax(taxable_gross_now, 1.0, is_single)
+
+        # Federal taxes if current employee Traditional contributions are redirected to Roth.
+        # Employer matches/flat contributions are intentionally excluded because they are not employee paycheck deferrals.
+        roth_pivot_taxable_gross = max(0.0, taxable_gross_now + current_trad_401k_employee + current_trad_ira_annual)
+        fed_tax_if_roth = calc_fed_tax(roth_pivot_taxable_gross, 1.0, is_single)
+
+        fed_tax_increase_yr = fed_tax_if_roth - actual_fed_tax_now
+
+        # Current-year federal tax savings from Traditional contributions.
+        base_fed_tax_now = calc_fed_tax(gross_wage_total, 1.0, is_single)
+        tax_savings_yr = base_fed_tax_now - actual_fed_tax_now
+        current_marginal_rate = get_marginal_rate(taxable_gross_now, is_single) * 100.0
+
+        # State/local tax modeling.
+        # Pennsylvania does not allow employee 401(k) deductions for PA PIT and local EIT.
+        # For non-PA states, this dashboard approximates current state withholding by applying the state rate
+        # to federal-style taxable wages after Traditional deductions.
+        if state_choice == "Pennsylvania":
+            current_state_taxable_wages = gross_wage_total
+            roth_state_taxable_wages = gross_wage_total
+            state_roth_note = "PA/local wage tax does not decrease for Traditional 401(k) contributions, so switching to Roth generally does not change PA/local withholding."
+        else:
+            current_state_taxable_wages = taxable_gross_now
+            roth_state_taxable_wages = roth_pivot_taxable_gross
+            state_roth_note = "For non-PA states, this model approximates state withholding by assuming Traditional contributions reduce state taxable wages."
+
+        current_state_tax_now = current_state_taxable_wages * state_tax_decimal
+        state_tax_if_roth = roth_state_taxable_wages * state_tax_decimal
+
+        current_local_tax_now = gross_wage_total * local_tax_decimal
+        local_tax_if_roth = gross_wage_total * local_tax_decimal
+
+        current_state_local_tax_now = current_state_tax_now + current_local_tax_now
+        state_local_tax_if_roth = state_tax_if_roth + local_tax_if_roth
+
+        state_local_tax_increase_yr = state_local_tax_if_roth - current_state_local_tax_now
+        total_tax_increase_yr = fed_tax_increase_yr + state_local_tax_increase_yr
+
+        current_fed_per_paycheck = actual_fed_tax_now / paychecks_per_year
+        roth_fed_per_paycheck = fed_tax_if_roth / paychecks_per_year
+        fed_increase_per_paycheck = fed_tax_increase_yr / paychecks_per_year
+
+        current_state_local_per_paycheck = current_state_local_tax_now / paychecks_per_year
+        roth_state_local_per_paycheck = state_local_tax_if_roth / paychecks_per_year
+        state_local_increase_per_paycheck = state_local_tax_increase_yr / paychecks_per_year
+
+        total_increase_per_paycheck = total_tax_increase_yr / paychecks_per_year
+        total_increase_per_month = total_tax_increase_yr / 12.0
+
+        if not df.empty:
+            df_ret = df[df["Age"] >= retire_age]
+            total_ret_fed_tax = df_ret["Fed Ordinary Tax"].sum()
+            total_ret_gross_withdrawals = df_ret["Trad Withdrawals"].sum()
+            ret_effective_rate = (
+                total_ret_fed_tax / total_ret_gross_withdrawals * 100.0
+            ) if total_ret_gross_withdrawals > 0 else 0.0
+        else:
+            ret_effective_rate = 0.0
+
+        arb_col1, arb_col2, arb_col3 = st.columns(3)
+
+        with arb_col1:
+            st.metric(
+                "Current Federal Marginal Bracket",
+                f"{current_marginal_rate:.1f}%",
+                help="The tax rate applied to your top dollar of federal taxable income today. This is the approximate rate you save by making Traditional contributions."
+            )
+
+        with arb_col2:
+            st.metric(
+                "Upfront Federal Tax Savings",
+                f"${tax_savings_yr:,.0f} / yr",
+                help="Estimated annual federal income tax reduction from current Traditional contributions."
+            )
+
+        with arb_col3:
+            st.metric(
+                "Effective Retirement Tax Rate",
+                f"{ret_effective_rate:.1f}%",
+                help="Your blended federal tax rate during retirement based on projected Traditional withdrawals."
+            )
+
+        st.markdown("#### Paycheck Tax Impact If Traditional Contributions Move to Roth")
+
+        pay_col1, pay_col2, pay_col3 = st.columns(3)
+
+        with pay_col1:
+            st.metric(
+                "Current Fed Tax / Paycheck",
+                f"${current_fed_per_paycheck:,.0f}",
+                help="Estimated current federal income tax per paycheck after current Traditional contributions."
+            )
+            st.metric(
+                "Fed Tax / Paycheck if Roth",
+                f"${roth_fed_per_paycheck:,.0f}",
+                delta=f"+${fed_increase_per_paycheck:,.0f}",
+                help="Estimated federal income tax per paycheck if current Traditional contributions are redirected to Roth."
+            )
+
+        with pay_col2:
+            st.metric(
+                "Current State/Local Tax / Paycheck",
+                f"${current_state_local_per_paycheck:,.0f}",
+                help="Estimated state plus local wage tax per paycheck."
+            )
+            st.metric(
+                "State/Local Tax / Paycheck if Roth",
+                f"${roth_state_local_per_paycheck:,.0f}",
+                delta=f"+${state_local_increase_per_paycheck:,.0f}",
+                help=state_roth_note
+            )
+
+        with pay_col3:
+            st.metric(
+                "Total Added Tax / Paycheck",
+                f"${total_increase_per_paycheck:,.0f}",
+                help="Estimated combined federal plus state/local tax increase per paycheck if current Traditional contributions move to Roth."
+            )
+            st.metric(
+                "Added Monthly Tax Bill",
+                f"${total_increase_per_month:,.0f}",
+                help="Estimated monthly cash-flow reduction from moving current Traditional contributions to Roth."
+            )
+
+        st.caption(
+            "This section estimates income-tax withholding impact only. It does not model Social Security tax, Medicare tax, employer payroll systems, tax credits, itemized deductions, HSA/FSA deductions, or paycheck-specific withholding elections."
+        )
+
+        if current_marginal_rate > (ret_effective_rate + 2.0):
+            st.success(
+                f" **Tax Arbitrage Check:** You are currently avoiding taxes at **{current_marginal_rate:.1f}%**. "
+                f"Your projected retirement tax rate is **{ret_effective_rate:.1f}%**. "
+                f"*Verdict: Traditional contributions are highly efficient, but switching to Roth would increase take-home-tax cost by about "
+                f"**${total_increase_per_paycheck:,.0f} per paycheck** / **${total_increase_per_month:,.0f} per month**.*"
+            )
+        elif current_marginal_rate < ret_effective_rate:
+            st.error(
+                f"⚠️ **Tax Torpedo Warning:** You are avoiding taxes at **{current_marginal_rate:.1f}%** today, "
+                f"but projected retirement tax rate is **{ret_effective_rate:.1f}%**. "
+                f"*Verdict: Roth contributions may be attractive, but the near-term tax cost is about "
+                f"**${total_increase_per_paycheck:,.0f} per paycheck** / **${total_increase_per_month:,.0f} per month**.*"
+            )
+        else:
+            st.info(
+                f"⚖️ **Tax Arbitrage Check:** Your current marginal rate and retirement effective rate are close. "
+                f"Roth and Traditional are mathematically similar; Roth may add flexibility. "
+                f"The estimated current tax cost to switch is about **${total_increase_per_paycheck:,.0f} per paycheck** / "
+                f"**${total_increase_per_month:,.0f} per month**."
+            )
+
+        st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("Current Tax & Paycheck Arbitrage")
 
         gross_wage_total = p1_salary + (p2_salary if not is_single else 0.0)
