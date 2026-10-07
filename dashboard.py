@@ -113,18 +113,35 @@ def calc_fed_tax(gross: float, inf_mult: float = 1.0, is_single_filer: bool = Fa
                     (182850.0 * inf_mult, 0.24), (99300.0 * inf_mult, 0.32), (246950.0 * inf_mult, 0.35),
                     (10000000.0 * inf_mult, 0.37)]
 
-    cur = taxable
-    for b_size, rate in brackets:
-        chunk = min(cur, b_size)
-        tax += chunk * rate
-        cur -= chunk
-        if cur <= 0:
-            break
-    return float(tax)
+        cur = taxable
+        for b_size, rate in brackets:
+            chunk = min(cur, b_size)
+            tax += chunk * rate
+            cur -= chunk
+            if cur <= 0:
+                break
+        return float(tax)
 
+    def get_marginal_rate(taxable_gross: float, is_single_filer: bool) -> float:
+        sd = 14600.0 if is_single_filer else 29200.0
+        taxable = max(0.0, taxable_gross - sd)
+        if taxable == 0: return 0.0
+        if is_single_filer:
+            brackets = [(11600.0, 0.10), (35550.0, 0.12), (53325.0, 0.22), (91425.0, 0.24), (49650.0, 0.32),
+                        (362350.0, 0.35), (10000000.0, 0.37)]
+        else:
+            brackets = [(23200.0, 0.10), (71100.0, 0.12), (106650.0, 0.22), (182850.0, 0.24), (99300.0, 0.32),
+                        (246950.0, 0.35), (10000000.0, 0.37)]
+        cur = taxable
+        for b_size, rate in brackets:
+            if cur <= b_size: return rate
+            cur -= b_size
+        return 0.37
 
-def calc_fed_cg_tax(gains: float, ordinary_gross: float, inf_mult: float = 1.0, is_single_filer: bool = False) -> float:
-    sd = (14600.0 if is_single_filer else 29200.0) * inf_mult
+    def calc_fed_cg_tax(gains: float, ordinary_gross: float, inf_mult: float = 1.0,
+                        is_single_filer: bool = False) -> float:
+        sd = (14600.0 if is_single_filer else 29200.0) * inf_mult
+
     ord_taxable = max(0.0, ordinary_gross - sd)
     rem_sd = max(0.0, sd - ordinary_gross)
     taxable_gains = max(0.0, gains - rem_sd)
@@ -671,72 +688,112 @@ if not getattr(sys, 'testing', False):
             p2_ss_age = 67
 
         st.markdown("### Investment Returns & Asset Location")
+        with st.expander("💡 Benchmark Guide: What returns should I expect?"):
+            st.markdown("""
+                            **Account types do not produce returns; the assets inside them do.**  
+                            Since this model removes inflation using *Real Returns*, here are historical benchmarks:
+
+                            | Optimal Asset Mix | Historical Real Return | Best For... |
+                            | :--- | :--- | :--- |
+                            | **100% Equities** | **6.5% – 8.0%** | Roth Accounts (Max tax-free growth, no RMDs) |
+                            | **80/20 or Stock ETFs** | **5.5% – 7.0%** | Brokerage Accounts (Capital gains efficiency) |
+                            | **60/40 or Bonds** | **3.5% – 5.5%** | Traditional Accounts (Slows RMD tax bombs) |
+                            """)
+
         asset_strategy = st.radio(
             "Return Assumption Strategy",
             ["Unified Portfolio", "Asset Location (By Tax Bucket)"],
             index=0 if str(config.get("asset_strategy", "Unified Portfolio")) == "Unified Portfolio" else 1,
-            horizontal=True,
-            help="Select whether your entire portfolio grows at the same average rate, or assign specific high/low-growth profiles to Pre-Tax, Roth, and Brokerage accounts."
+            horizontal=True
         )
 
+        preset_choice = st.selectbox("Quick Load Presets", ["Custom Inputs", "Aggressive (100% Equities Everywhere)",
+                                                            "Standard Lifecycle (TDF & Taxable Bridge)"])
+
         if asset_strategy == "Unified Portfolio":
+            if preset_choice == "Aggressive (100% Equities Everywhere)":
+                def_pre, def_post, def_glide = 7.5, 7.0, "Delayed (Roth Heritage)"
+            elif preset_choice == "Standard Lifecycle (TDF & Taxable Bridge)":
+                def_pre, def_post, def_glide = 7.0, 4.5, "Safe (Standard TDF)"
+            else:
+                def_pre, def_post, def_glide = float(config.get("pre_ret_return", 7.0)), float(
+                    config.get("post_ret_return", 4.0)), str(config.get("unified_glide_profile", "Safe (Standard TDF)"))
+
             u_col1, u_col2, u_col3 = st.columns(3)
             with u_col1:
-                pre_ret_return = st.number_input("Pre-Retirement Return (Real %)",
-                                                 value=float(config["pre_ret_return"]), step=0.1,
-                                                 help="Expected real investment return before retirement.") / 100.0
+                pre_ret_return = st.number_input("Pre-Ret Return (Real %)", value=def_pre, step=0.1) / 100.0
             with u_col2:
-                post_ret_return = st.number_input("Post-Retirement Return (Real %)",
-                                                  value=float(config["post_ret_return"]), step=0.1,
-                                                  help="Expected real investment return during retirement decumulation.") / 100.0
+                post_ret_return = st.number_input("Post-Ret Return (Real %)", value=def_post, step=0.1) / 100.0
             with u_col3:
-                unified_glide_profile = st.selectbox("Unified Glide Profile", GLIDE_OPTIONS, index=GLIDE_OPTIONS.index(
-                    str(config.get("unified_glide_profile", "Safe (Standard TDF)"))),
-                                                     help="Select the mathematical transition curve used to slowly shift your returns from Pre-Retirement to Post-Retirement.")
+                unified_glide_profile = st.selectbox("Unified Glide Profile", GLIDE_OPTIONS,
+                                                     index=GLIDE_OPTIONS.index(def_glide))
 
             pre_ret_trad = pre_ret_roth = pre_ret_brok = pre_ret_return
             post_ret_trad = post_ret_roth = post_ret_brok = post_ret_return
             trad_glide_profile = roth_glide_profile = brok_glide_profile = unified_glide_profile
-
         else:
-            st.info(
-                "💡 **Common Sense Setup:** To avoid forced RMD tax bombs, planners typically load Pre-Tax accounts with conservative bonds (Safe Glide), load Roth accounts with aggressive stocks for tax-free growth (Delayed/No Glide), and load Brokerage with tax-efficient broad market ETFs (Moderate Glide).")
+            if preset_choice == "Aggressive (100% Equities Everywhere)":
+                dt_pre, dt_post, dt_gl = 7.5, 7.0, "Delayed (Roth Heritage)"
+                dr_pre, dr_post, dr_gl = 7.5, 7.0, "Delayed (Roth Heritage)"
+                db_pre, db_post, db_gl = 7.5, 7.0, "Delayed (Roth Heritage)"
+            elif preset_choice == "Standard Lifecycle (TDF & Taxable Bridge)":
+                dt_pre, dt_post, dt_gl = 6.5, 3.5, "Safe (Standard TDF)"
+                dr_pre, dr_post, dr_gl = 7.5, 6.0, "Delayed (Roth Heritage)"
+                db_pre, db_post, db_gl = 7.0, 4.5, "Moderate (Taxable Bridge)"
+            else:
+                dt_pre, dt_post, dt_gl = float(config.get("pre_ret_trad", 6.0)), float(
+                    config.get("post_ret_trad", 3.5)), str(config.get("trad_glide_profile", "Safe (Standard TDF)"))
+                dr_pre, dr_post, dr_gl = float(config.get("pre_ret_roth", 8.5)), float(
+                    config.get("post_ret_roth", 6.0)), str(config.get("roth_glide_profile", "Delayed (Roth Heritage)"))
+                db_pre, db_post, db_gl = float(config.get("pre_ret_brok", 7.5)), float(
+                    config.get("post_ret_brok", 5.0)), str(
+                    config.get("brok_glide_profile", "Moderate (Taxable Bridge)"))
+
             al_col1, al_col2, al_col3 = st.columns(3)
             with al_col1:
                 st.markdown("**Pre-Tax (Trad 401k/IRA)**")
-                pre_ret_trad = st.number_input("Pre-Ret Return (%) ", value=float(config.get("pre_ret_trad", 6.0)),
-                                               step=0.1, help="Expected real return for Pre-Tax accounts.") / 100.0
-                post_ret_trad = st.number_input("Post-Ret Return (%) ", value=float(config.get("post_ret_trad", 3.5)),
-                                                step=0.1,
-                                                help="Expected real return for Pre-Tax accounts in retirement.") / 100.0
-                trad_glide_profile = st.selectbox("Trad Glide Profile", GLIDE_OPTIONS, index=GLIDE_OPTIONS.index(
-                    str(config.get("trad_glide_profile", "Safe (Standard TDF)"))),
-                                                  help="Starts shifting 25 years before retirement. Best for Pre-Tax accounts to mitigate Sequence of Returns Risk.")
+                pre_ret_trad = st.number_input("Pre-Ret Return (%) ", value=dt_pre, step=0.1) / 100.0
+                post_ret_trad = st.number_input("Post-Ret Return (%) ", value=dt_post, step=0.1) / 100.0
+                trad_glide_profile = st.selectbox("Trad Glide Profile", GLIDE_OPTIONS, index=GLIDE_OPTIONS.index(dt_gl))
             with al_col2:
                 st.markdown("**Post-Tax (Roth)**")
-                pre_ret_roth = st.number_input("Pre-Ret Return (%)  ", value=float(config.get("pre_ret_roth", 8.5)),
-                                               step=0.1,
-                                               help="Expected real return for tax-free Roth accounts.") / 100.0
-                post_ret_roth = st.number_input("Post-Ret Return (%)  ", value=float(config.get("post_ret_roth", 6.0)),
-                                                step=0.1,
-                                                help="Expected real return for tax-free Roth accounts in retirement.") / 100.0
-                roth_glide_profile = st.selectbox("Roth Glide Profile", GLIDE_OPTIONS, index=GLIDE_OPTIONS.index(
-                    str(config.get("roth_glide_profile", "Delayed (Roth Heritage)"))),
-                                                  help="Doesn't start shifting until retirement, gliding over 20 years. Best for Roth accounts left to compound tax-free.")
+                pre_ret_roth = st.number_input("Pre-Ret Return (%)  ", value=dr_pre, step=0.1) / 100.0
+                post_ret_roth = st.number_input("Post-Ret Return (%)  ", value=dr_post, step=0.1) / 100.0
+                roth_glide_profile = st.selectbox("Roth Glide Profile", GLIDE_OPTIONS, index=GLIDE_OPTIONS.index(dr_gl))
             with al_col3:
                 st.markdown("**Taxable (Brokerage)**")
-                pre_ret_brok = st.number_input("Pre-Ret Return (%)   ", value=float(config.get("pre_ret_brok", 7.5)),
-                                               step=0.1, help="Expected real return for Taxable accounts.") / 100.0
-                post_ret_brok = st.number_input("Post-Ret Return (%)   ", value=float(config.get("post_ret_brok", 5.0)),
-                                                step=0.1,
-                                                help="Expected real return for Taxable accounts in retirement.") / 100.0
-                brok_glide_profile = st.selectbox("Brok Glide Profile", GLIDE_OPTIONS, index=GLIDE_OPTIONS.index(
-                    str(config.get("brok_glide_profile", "Moderate (Taxable Bridge)"))),
-                                                  help="Starts shifting 15 years before retirement. Best for Brokerage accounts providing flexible bridge income.")
+                pre_ret_brok = st.number_input("Pre-Ret Return (%)   ", value=db_pre, step=0.1) / 100.0
+                post_ret_brok = st.number_input("Post-Ret Return (%)   ", value=db_post, step=0.1) / 100.0
+                brok_glide_profile = st.selectbox("Brok Glide Profile", GLIDE_OPTIONS, index=GLIDE_OPTIONS.index(db_gl))
 
-            pre_ret_return = float(config.get("pre_ret_return", 7.0)) / 100.0
-            post_ret_return = float(config.get("post_ret_return", 4.0)) / 100.0
-            unified_glide_profile = "Safe (Standard TDF)"
+            pre_ret_return = pre_ret_trad
+            post_ret_return = post_ret_trad
+            unified_glide_profile = trad_glide_profile
+
+        # Glide Path Visualization
+        glide_ages = list(range(current_age, target_lifespan + 1))
+        if asset_strategy == "Unified Portfolio":
+            y_uni = [
+                get_glide_return_custom(a, retire_age, pre_ret_return, post_ret_return, unified_glide_profile) * 100 for
+                a in glide_ages]
+            df_glide = pd.DataFrame({"Age": glide_ages, "Unified Portfolio": y_uni})
+            fig_glide = px.line(df_glide, x="Age", y="Unified Portfolio", title="Projected Return Glide Path (%)")
+        else:
+            y_trad = [get_glide_return_custom(a, retire_age, pre_ret_trad, post_ret_trad, trad_glide_profile) * 100 for
+                      a in glide_ages]
+            y_roth = [get_glide_return_custom(a, retire_age, pre_ret_roth, post_ret_roth, roth_glide_profile) * 100 for
+                      a in glide_ages]
+            y_brok = [get_glide_return_custom(a, retire_age, pre_ret_brok, post_ret_brok, brok_glide_profile) * 100 for
+                      a in glide_ages]
+            df_glide = pd.DataFrame({"Age": glide_ages, "Traditional": y_trad, "Roth": y_roth, "Brokerage": y_brok})
+            fig_glide = px.line(df_glide, x="Age", y=["Traditional", "Roth", "Brokerage"],
+                                title="Projected Return Glide Paths by Tax Bucket (%)")
+
+        fig_glide.update_layout(yaxis_title="Real Return (%)", xaxis_title="Age", height=300,
+                                margin=dict(t=40, b=0, l=0, r=0))
+        fig_glide.add_vline(x=retire_age, line_dash="dash", line_color="red", annotation_text="Retirement",
+                            annotation_position="top right")
+        st.plotly_chart(fig_glide, use_container_width=True)
 
         st.markdown("---")
 
@@ -1577,41 +1634,73 @@ if not getattr(sys, 'testing', False):
                 if show_roth_401k: st.markdown(fmt_row("Roth 401(k)", p1_roth_401k_mo, p1_roth_match_mo))
                 if show_roth_ira: st.markdown(fmt_row("Roth IRA", p1_roth_ira_mo))
                 if show_brokerage: st.markdown(fmt_row("Brokerage", p1_brok_mo))
-            with cont_col3:
-                st.markdown("**Total Household Monthly:**")
-                st.markdown(f"- **Total Employee (Out of Pocket):** \\${total_employee:,.0f}")
-                st.markdown(f"- **Total Employer (% Matches):** \\${p1_trad_match_mo + p1_roth_match_mo:,.0f}")
-                if show_trad_401k: st.markdown(f"- **Total Employer (Flat/Bonus):** \\${p1_flat_mo:,.0f}")
-                st.metric("Total Monthly Saved", f"${total_saved:,.0f}")
-        else:
-            cont_col1, cont_col2, cont_col3 = st.columns(3)
-            with cont_col1:
-                st.markdown("**Person 1 Monthly Savings:**")
-                if show_trad_401k: st.markdown(fmt_row("Trad 401(k)", p1_trad_401k_mo, p1_trad_match_mo))
-                if show_trad_ira: st.markdown(fmt_row("Trad IRA", p1_trad_ira_mo))
-                if show_roth_401k: st.markdown(fmt_row("Roth 401(k)", p1_roth_401k_mo, p1_roth_match_mo))
-                if show_roth_ira: st.markdown(fmt_row("Roth IRA", p1_roth_ira_mo))
-                if show_brokerage: st.markdown(fmt_row("Brokerage", p1_brok_mo))
-            with cont_col2:
-                st.markdown("**Person 2 Monthly Savings:**")
-                if show_trad_401k: st.markdown(fmt_row("Trad 401(k)", p2_trad_401k_mo, p2_trad_match_mo))
-                if show_trad_ira: st.markdown(fmt_row("Trad IRA", p2_trad_ira_mo))
-                if show_roth_401k: st.markdown(fmt_row("Roth 401(k)", p2_roth_401k_mo, p2_roth_match_mo))
-                if show_roth_ira: st.markdown(fmt_row("Roth IRA", p2_roth_ira_mo))
-                if show_brokerage: st.markdown(fmt_row("Brokerage", p2_brok_mo))
-            with cont_col3:
-                st.markdown("**Total Household Monthly:**")
-                st.markdown(f"- **Total Employee (Out of Pocket):** \\${total_employee:,.0f}")
-                st.markdown(
-                    f"- **Total Employer (% Matches):** \\${p1_trad_match_mo + p2_trad_match_mo + p1_roth_match_mo + p2_roth_match_mo:,.0f}")
-                if show_trad_401k: st.markdown(f"- **Total Employer (Flat/Bonus):** \\${p1_flat_mo + p2_flat_mo:,.0f}")
-                st.metric("Total Monthly Saved", f"${total_saved:,.0f}")
+                with cont_col3:
+                    st.markdown("**Total Household Monthly:**")
+                    st.markdown(f"- **Total Employee (Out of Pocket):** \\${total_employee:,.0f}")
+                    st.markdown(
+                        f"- **Total Employer (% Matches):** \\${p1_trad_match_mo + p2_trad_match_mo + p1_roth_match_mo + p2_roth_match_mo:,.0f}")
+                    if show_trad_401k: st.markdown(
+                        f"- **Total Employer (Flat/Bonus):** \\${p1_flat_mo + p2_flat_mo:,.0f}")
+                    st.metric("Total Monthly Saved", f"${total_saved:,.0f}")
 
-        st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
 
-        # SUBSECTION: PORTFOLIO MILESTONES & SOLVERS
-        st.subheader("Portfolio Milestones & Solvers")
-        kpi1, kpi2, kpi3 = st.columns(3)
+            # --- NEW SUBSECTION: CURRENT TAX & PAYCHECK ARBITRAGE ---
+            st.subheader("Current Tax & Paycheck Arbitrage")
+
+            gross_wage_total = p1_salary + (p2_salary if not is_single else 0.0)
+
+            # Scenario A: Base Tax (No Pre-Tax Deductions)
+            base_fed_tax_now = calc_fed_tax(gross_wage_total, 1.0, is_single)
+
+            # Scenario B: Actual Tax (With Pre-Tax Deductions)
+            pre_tax_deductions_now = (p1_salary * p1_trad_401k_cont) + p1_trad_401k_flat + (p1_trad_ira_mo * 12.0)
+            if not is_single:
+                pre_tax_deductions_now += (p2_salary * p2_trad_401k_cont) + p2_trad_401k_flat + (p2_trad_ira_mo * 12.0)
+
+            taxable_gross_now = gross_wage_total - pre_tax_deductions_now
+            actual_fed_tax_now = calc_fed_tax(taxable_gross_now, 1.0, is_single)
+
+            tax_savings_yr = base_fed_tax_now - actual_fed_tax_now
+            current_marginal_rate = get_marginal_rate(taxable_gross_now, is_single) * 100.0
+
+            # Calculate Effective Retirement Tax Rate
+            if not df.empty:
+                df_ret = df[df['Age'] >= retire_age]
+                total_ret_fed_tax = df_ret['Fed Ordinary Tax'].sum()
+                total_ret_gross_withdrawals = df_ret['Trad Withdrawals'].sum() + df_ret['RMD Amount'].sum()
+                ret_effective_rate = (
+                            total_ret_fed_tax / total_ret_gross_withdrawals * 100.0) if total_ret_gross_withdrawals > 0 else 0.0
+            else:
+                ret_effective_rate = 0.0
+
+            arb_col1, arb_col2, arb_col3 = st.columns(3)
+            with arb_col1:
+                st.metric("Current Federal Marginal Bracket", f"{current_marginal_rate:.1f}%",
+                          help="The tax rate applied to your top dollar of income today. This is the rate you 'save' by making Traditional contributions.")
+            with arb_col2:
+                st.metric("Upfront Federal Tax Savings", f"${tax_savings_yr:,.0f} / yr",
+                          help="The exact dollar amount the IRS effectively pays you this year to lock your money into a Traditional account.")
+            with arb_col3:
+                st.metric("Effective Retirement Tax Rate", f"{ret_effective_rate:.1f}%",
+                          help="Your blended federal tax rate during retirement based on your projected Traditional withdrawals and RMDs.")
+
+            if current_marginal_rate > (ret_effective_rate + 2.0):
+                st.success(
+                    f"💡 **Tax Arbitrage Check:** You are currently avoiding taxes at **{current_marginal_rate:.1f}%**. Your projected retirement tax rate is **{ret_effective_rate:.1f}%**. *Verdict: Traditional contributions are highly efficient.*")
+            elif current_marginal_rate < ret_effective_rate:
+                st.error(
+                    f"⚠️ **Tax Torpedo Warning:** You are avoiding taxes at **{current_marginal_rate:.1f}%** today, but massive RMDs will force your retirement tax rate up to **{ret_effective_rate:.1f}%**. *Verdict: You should pivot new contributions to Roth.*")
+            else:
+                st.info(
+                    f"⚖️ **Tax Arbitrage Check:** Your current marginal rate and retirement effective rate are very close. Roth and Traditional are mathematically tied; consider Roth for future flexibility.")
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            # --- END NEW SUBSECTION ---
+
+            # SUBSECTION: PORTFOLIO MILESTONES & SOLVERS
+            st.subheader("Portfolio Milestones & Solvers")
+            kpi1, kpi2, kpi3 = st.columns(3)
         with kpi1:
             st.metric("Total Social Security Received", f"${tot_ss_received_val:,.0f}",
                       help="Lifetime cash flow generated by Social Security benefits (accounting for COLA if CPI is enabled).")
