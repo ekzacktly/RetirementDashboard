@@ -971,6 +971,29 @@ if not getattr(sys, 'testing', False):
 
         st.markdown("### Investment Returns & Asset Location")
 
+        with st.expander(" Benchmark Guide: Suggested pre-retirement and post-retirement real returns"):
+            st.markdown("""
+            **These inputs should be real returns, meaning after inflation.**  
+            Account types do not generate returns by themselves—the investments held inside each account do. The table below gives practical modeling ranges based on how many investors commonly allocate each bucket before and after retirement.
+
+            | Account Bucket | Typical Pre-Retirement Allocation | Suggested Pre-Ret Real Return | Typical Post-Retirement Allocation | Suggested Post-Ret Real Return |
+            | :--- | :--- | :---: | :--- | :---: |
+            | **Traditional / Pre-Tax** | Balanced or moderately aggressive: 60/40 to 80/20 stock/bond mix. Often holds more bonds because future withdrawals are taxable and RMDs can create tax pressure. | **4.5% – 6.5%** | More conservative: 40/60 to 60/40 stock/bond mix to reduce sequence risk and future RMD volatility. | **2.5% – 4.5%** |
+            | **Roth** | Growth-oriented: 80/20 to 100% equities because growth is tax-free, there are no lifetime RMDs, and it is often the longest-duration bucket. | **6.0% – 8.0%** | Still growth-biased: 70/30 to 100% equities if Roth is preserved for late-life spending, heirs, or tax-free compounding. | **4.5% – 7.0%** |
+            | **Taxable Brokerage** | Tax-efficient growth: broad-market equity ETFs, index funds, and possibly municipal bonds. Often 70/30 to 90/10 depending on risk tolerance. | **5.0% – 7.0%** | Flexible bridge/liquidity bucket: 50/50 to 75/25 with tax-efficient ETFs, cash reserves, and possibly muni bonds. | **3.0% – 5.5%** |
+            | **Unified Portfolio** | Household-level blended portfolio across all accounts, often 70/30 to 90/10 while far from retirement. | **5.0% – 7.0%** | Household-level blended portfolio after retirement, often 40/60 to 70/30 depending on withdrawal rate and risk tolerance. | **3.0% – 5.0%** |
+
+            **Practical default guidance:**
+            - If using **Unified Portfolio**, a reasonable baseline is around **7.0% pre-retirement** and **4.0%–4.5% post-retirement** real return.
+            - If using **Asset Location**, a common planning setup is:
+              - **Traditional:** lower return / lower volatility to reduce RMD tax bombs.
+              - **Roth:** highest return assumption because tax-free growth is most valuable there.
+              - **Brokerage:** moderate return assumption using tax-efficient ETFs and bridge-liquidity assets.
+
+            **Important modeling note:**  
+            Higher returns increase projected wealth, but they also increase sequence-of-returns risk. Use the Monte Carlo tab to stress test aggressive assumptions.
+            """)
+
         with st.expander(" Benchmark Guide: What returns should I expect?"):
             st.markdown("""
             **Account types do not produce returns; the assets inside them do.**  
