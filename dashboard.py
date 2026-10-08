@@ -1362,10 +1362,17 @@ if not getattr(sys, 'testing', False):
                         step=1.0,
                         help="Employer matching percentage legally deposited as Roth (per SECURE 2.0)."
                     ) / 100.0
+
+                    p1_rollover_roth_at_retire = st.checkbox(
+                        "Roll P1 Roth 401(k) into Roth IRA at Retirement",
+                        value=bool(config.get("p1_rollover_roth_at_retire", True)),
+                        help="If checked, Person 1's entire Roth 401(k) balance is rolled into their Roth IRA upon reaching retirement age."
+                    )
                 else:
                     p1_roth_401k_start = 0.0
                     p1_roth_401k_cont = 0.0
                     p1_roth_401k_match = 0.0
+                    p1_rollover_roth_at_retire = False
 
                 if show_roth_ira:
                     p1_roth_ira_start = st.number_input(
@@ -1412,10 +1419,18 @@ if not getattr(sys, 'testing', False):
                         disabled=is_single,
                         help="Employer matching percentage legally deposited as Roth (per SECURE 2.0)."
                     ) / 100.0
+
+                    p2_rollover_roth_at_retire = st.checkbox(
+                        "Roll P2 Roth 401(k) into Roth IRA at Retirement",
+                        value=bool(config.get("p2_rollover_roth_at_retire", True)),
+                        disabled=is_single,
+                        help="If checked, Person 2's entire Roth 401(k) balance is rolled into their Roth IRA upon reaching retirement age."
+                    )
                 else:
                     p2_roth_401k_start = 0.0
                     p2_roth_401k_cont = 0.0
                     p2_roth_401k_match = 0.0
+                    p2_rollover_roth_at_retire = False
 
                 if show_roth_ira:
                     p2_roth_ira_start = st.number_input(
@@ -1559,6 +1574,7 @@ if not getattr(sys, 'testing', False):
             "p1_roth_401k_start": p1_roth_401k_start,
             "p1_roth_401k_cont": round(p1_roth_401k_cont * 100, 2),
             "p1_roth_401k_match": round(p1_roth_401k_match * 100, 2),
+            "p1_rollover_roth_at_retire": p1_rollover_roth_at_retire,
             "p1_roth_ira_start": p1_roth_ira_start,
             "p1_roth_ira_mo": p1_roth_ira_mo,
             "p1_brok_start": p1_brok_start,
@@ -1577,6 +1593,7 @@ if not getattr(sys, 'testing', False):
             "p2_roth_401k_start": p2_roth_401k_start if not is_single else 0.0,
             "p2_roth_401k_cont": round(p2_roth_401k_cont * 100, 2) if not is_single else 0.0,
             "p2_roth_401k_match": round(p2_roth_401k_match * 100, 2) if not is_single else 0.0,
+            "p2_rollover_roth_at_retire": p2_rollover_roth_at_retire if not is_single else False,
             "p2_roth_ira_start": p2_roth_ira_start if not is_single else 0.0,
             "p2_roth_ira_mo": p2_roth_ira_mo if not is_single else 0.0,
             "p2_brok_start": p2_brok_start if not is_single else 0.0,
@@ -1668,6 +1685,14 @@ if not getattr(sys, 'testing', False):
                     dep_age = str(age)
 
                 if age == retire_age or (age == current_age and current_age >= retire_age):
+                    # Execute Roth 401(k) to Roth IRA rollovers at retirement age
+                    if p1_rollover_roth_at_retire and p1_roth_401k_bal > 0:
+                        p1_roth_ira_bal += p1_roth_401k_bal
+                        p1_roth_401k_bal = 0.0
+                    if not is_single and p2_rollover_roth_at_retire and p2_roth_401k_bal > 0:
+                        p2_roth_ira_bal += p2_roth_401k_bal
+                        p2_roth_401k_bal = 0.0
+
                     port_at_retire = start_year_total_bal
                     ret_balances_dict = {
                         "Trad Ending": trad_bal_tot_start,
