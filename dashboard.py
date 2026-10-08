@@ -1625,11 +1625,6 @@ if not getattr(sys, 'testing', False):
             p2_brok_bal = p2_brok_start if not is_single else 0.0
             p2_brok_basis = p2_brok_start if not is_single else 0.0
 
-            p1_trad_bal = p1_trad_401k_bal + p1_trad_ira_bal
-            p2_trad_bal = p2_trad_401k_bal + p2_trad_ira_bal
-            p1_roth_bal = p1_roth_401k_bal + p1_roth_ira_bal
-            p2_roth_bal = p2_roth_401k_bal + p2_roth_ira_bal
-
             curr_p1_sal = p1_salary
             curr_p2_sal = p2_salary if not is_single else 0.0
 
@@ -1741,6 +1736,9 @@ if not getattr(sys, 'testing', False):
                     ) if not is_single else 0.0
                     p2_trad_ira_in = (p2_trad_ira_mo * 12.0) if not is_single else 0.0
 
+                    growth_p1_trad = (p1_trad_401k_bal + p1_trad_401k_in + p1_trad_ira_bal + p1_trad_ira_in) * ret_trad
+                    growth_p2_trad = (p2_trad_401k_bal + p2_trad_401k_in + p2_trad_ira_bal + p2_trad_ira_in) * ret_trad if not is_single else 0.0
+
                     p1_trad_401k_bal = (p1_trad_401k_bal + p1_trad_401k_in) * (1.0 + ret_trad)
                     p1_trad_ira_bal = (p1_trad_ira_bal + p1_trad_ira_in) * (1.0 + ret_trad)
                     if not is_single:
@@ -1759,6 +1757,9 @@ if not getattr(sys, 'testing', False):
                     ) if not is_single else 0.0
                     p2_roth_ira_in = (p2_roth_ira_mo * 12.0) if not is_single else 0.0
 
+                    growth_p1_roth = (p1_roth_401k_bal + p1_roth_401k_in + p1_roth_ira_bal + p1_roth_ira_in) * ret_roth
+                    growth_p2_roth = (p2_roth_401k_bal + p2_roth_401k_in + p2_roth_ira_bal + p2_roth_ira_in) * ret_roth if not is_single else 0.0
+
                     p1_roth_401k_bal = (p1_roth_401k_bal + p1_roth_401k_in) * (1.0 + ret_roth)
                     p1_roth_ira_bal = (p1_roth_ira_bal + p1_roth_ira_in) * (1.0 + ret_roth)
                     if not is_single:
@@ -1767,6 +1768,9 @@ if not getattr(sys, 'testing', False):
 
                     p1_brok_in = p1_brok_mo * 12.0
                     p2_brok_in = p2_brok_mo * 12.0 if not is_single else 0.0
+
+                    growth_p1_brok = (p1_brok_bal + p1_brok_in) * ret_brok
+                    growth_p2_brok = (p2_brok_bal + p2_brok_in) * ret_brok if not is_single else 0.0
 
                     p1_brok_bal = (p1_brok_bal + p1_brok_in) * (1.0 + ret_brok)
                     p1_brok_basis += p1_brok_in
@@ -2004,10 +2008,10 @@ if not getattr(sys, 'testing', False):
                                 total_tax_brokerage += irmaa_cg_fed
                                 total_state_tax_retired += irmaa_cg_state
 
-                    growth_p1_trad = p1_trad_bal * ret_trad
-                    growth_p2_trad = p2_trad_bal * ret_trad if not is_single else 0.0
-                    growth_p1_roth = p1_roth_bal * ret_roth
-                    growth_p2_roth = p2_roth_bal * ret_roth if not is_single else 0.0
+                    growth_p1_trad = (p1_trad_401k_bal + p1_trad_ira_bal) * ret_trad
+                    growth_p2_trad = (p2_trad_401k_bal + p2_trad_ira_bal) * ret_trad if not is_single else 0.0
+                    growth_p1_roth = (p1_roth_401k_bal + p1_roth_ira_bal) * ret_roth
+                    growth_p2_roth = (p2_roth_401k_bal + p2_roth_ira_bal) * ret_roth if not is_single else 0.0
                     growth_p1_brok = p1_brok_bal * ret_brok
                     growth_p2_brok = p2_brok_bal * ret_brok if not is_single else 0.0
 
@@ -2260,10 +2264,10 @@ if not getattr(sys, 'testing', False):
                                 total_tax_brokerage += irmaa_cg_fed
                                 total_state_tax_retired += irmaa_cg_state
 
-                    growth_p1_trad = p1_trad_bal * ret_trad
-                    growth_p2_trad = p2_trad_bal * ret_trad if not is_single else 0.0
-                    growth_p1_roth = p1_roth_bal * ret_roth
-                    growth_p2_roth = p2_roth_bal * ret_roth if not is_single else 0.0
+                    growth_p1_trad = (p1_trad_401k_bal + p1_trad_ira_bal) * ret_trad
+                    growth_p2_trad = (p2_trad_401k_bal + p2_trad_ira_bal) * ret_trad if not is_single else 0.0
+                    growth_p1_roth = (p1_roth_401k_bal + p1_roth_ira_bal) * ret_roth
+                    growth_p2_roth = (p2_roth_401k_bal + p2_roth_ira_bal) * ret_roth if not is_single else 0.0
                     growth_p1_brok = p1_brok_bal * ret_brok
                     growth_p2_brok = p2_brok_bal * ret_brok if not is_single else 0.0
 
@@ -2869,6 +2873,14 @@ if not getattr(sys, 'testing', False):
         active_cols = [col for col in potential_cols if col in df.columns and df[col].max() > 0]
 
         if not df.empty and active_cols:
+            # Sort active columns by balance at retirement in descending order
+            # (First column is placed on the bottom of the stack, subsequent columns stack on top)
+            ret_row = df[df["Age"] == retire_age]
+            if not ret_row.empty:
+                active_cols.sort(key=lambda col: ret_row[col].iloc[0], reverse=True)
+            else:
+                active_cols.sort(key=lambda col: df[col].max(), reverse=True)
+
             chart_data = df[["Age"] + active_cols]
 
             fig = px.area(
