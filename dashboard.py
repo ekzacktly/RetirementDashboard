@@ -2033,34 +2033,34 @@ if not getattr(sys, 'testing', False):
                                 total_tax_brokerage += irmaa_cg_fed
                                 total_state_tax_retired += irmaa_cg_state
 
-                    growth_p1_trad = (p1_trad_401k_bal + p1_trad_ira_bal) * ret_trad
-                    growth_p2_trad = (p2_trad_401k_bal + p2_trad_ira_bal) * ret_trad if not is_single else 0.0
-                    growth_p1_roth = (p1_roth_401k_bal + p1_roth_ira_bal) * ret_roth
-                    growth_p2_roth = (p2_roth_401k_bal + p2_roth_ira_bal) * ret_roth if not is_single else 0.0
-                    growth_p1_brok = p1_brok_bal * ret_brok
-                    growth_p2_brok = p2_brok_bal * ret_brok if not is_single else 0.0
+                            growth_p1_trad = (p1_trad_401k_bal + p1_trad_ira_bal) * ret_trad
+                            growth_p2_trad = (p2_trad_401k_bal + p2_trad_ira_bal) * ret_trad if not is_single else 0.0
+                            growth_p1_roth = (p1_roth_401k_bal + p1_roth_ira_bal) * ret_roth
+                            growth_p2_roth = (p2_roth_401k_bal + p2_roth_ira_bal) * ret_roth if not is_single else 0.0
+                            growth_p1_brok = p1_brok_bal * ret_brok
+                            growth_p2_brok = p2_brok_bal * ret_brok if not is_single else 0.0
 
-                    p1_trad_401k_bal *= (1.0 + ret_trad)
-                    p1_trad_ira_bal *= (1.0 + ret_trad)
-                    if not is_single:
-                        p2_trad_401k_bal *= (1.0 + ret_trad)
-                        p2_trad_ira_bal *= (1.0 + ret_trad)
+                            p1_trad_401k_bal *= (1.0 + ret_trad)
+                            p1_trad_ira_bal *= (1.0 + ret_trad)
+                            if not is_single:
+                                p2_trad_401k_bal *= (1.0 + ret_trad)
+                                p2_trad_ira_bal *= (1.0 + ret_trad)
 
-                    p1_roth_401k_bal *= (1.0 + ret_roth)
-                    p1_roth_ira_bal *= (1.0 + ret_roth)
-                    if not is_single:
-                        p2_roth_401k_bal *= (1.0 + ret_roth)
-                        p2_roth_ira_bal *= (1.0 + ret_roth)
+                            p1_roth_401k_bal *= (1.0 + ret_roth)
+                            p1_roth_ira_bal *= (1.0 + ret_roth)
+                            if not is_single:
+                                p2_roth_401k_bal *= (1.0 + ret_roth)
+                                p2_roth_ira_bal *= (1.0 + ret_roth)
 
-                    p1_brok_bal *= (1.0 + ret_brok)
-                    if not is_single:
-                        p2_brok_bal *= (1.0 + ret_brok)
+                            p1_brok_bal *= (1.0 + ret_brok)
+                            if not is_single:
+                                p2_brok_bal *= (1.0 + ret_brok)
 
-                    status_label = "Phase 1 (Penalty)"
+                            status_label = "Phase 1 (Penalty)"
 
-                else:
-                    if use_ss and age >= p1_ss_age:
-                        ss_yr += (p1_fra_benefit * 12.0) * calc_ss_multiplier(p1_ss_age) * ss_multiplier_base
+                        else:
+                            if use_ss and age >= p1_ss_age:
+                                ss_yr += (p1_fra_benefit * 12.0) * calc_ss_multiplier(p1_ss_age) * ss_multiplier_base
 
                     if use_ss and not is_single and age >= p2_ss_age:
                         ss_yr += (p2_fra_benefit * 12.0) * calc_ss_multiplier(p2_ss_age) * ss_multiplier_base
@@ -2289,34 +2289,34 @@ if not getattr(sys, 'testing', False):
                                 total_tax_brokerage += irmaa_cg_fed
                                 total_state_tax_retired += irmaa_cg_state
 
-                    growth_p1_trad = (p1_trad_401k_bal + p1_trad_ira_bal) * ret_trad
-                    growth_p2_trad = (p2_trad_401k_bal + p2_trad_ira_bal) * ret_trad if not is_single else 0.0
-                    growth_p1_roth = (p1_roth_401k_bal + p1_roth_ira_bal) * ret_roth
-                    growth_p2_roth = (p2_roth_401k_bal + p2_roth_ira_bal) * ret_roth if not is_single else 0.0
-                    growth_p1_brok = p1_brok_bal * ret_brok
-                    growth_p2_brok = p2_brok_bal * ret_brok if not is_single else 0.0
+                            growth_p1_trad = (p1_trad_401k_bal + p1_trad_ira_bal) * ret_trad
+                            growth_p2_trad = (p2_trad_401k_bal + p2_trad_ira_bal) * ret_trad if not is_single else 0.0
+                            growth_p1_roth = (p1_roth_401k_bal + p1_roth_ira_bal) * ret_roth
+                            growth_p2_roth = (p2_roth_401k_bal + p2_roth_ira_bal) * ret_roth if not is_single else 0.0
+                            growth_p1_brok = p1_brok_bal * ret_brok
+                            growth_p2_brok = p2_brok_bal * ret_brok if not is_single else 0.0
 
-                    p1_trad_401k_bal *= (1.0 + ret_trad)
-                    p1_trad_ira_bal *= (1.0 + ret_trad)
-                    if not is_single:
-                        p2_trad_401k_bal *= (1.0 + ret_trad)
-                        p2_trad_ira_bal *= (1.0 + ret_trad)
+                            p1_trad_401k_bal *= (1.0 + ret_trad)
+                            p1_trad_ira_bal *= (1.0 + ret_trad)
+                            if not is_single:
+                                p2_trad_401k_bal *= (1.0 + ret_trad)
+                                p2_trad_ira_bal *= (1.0 + ret_trad)
 
-                    p1_roth_401k_bal *= (1.0 + ret_roth)
-                    p1_roth_ira_bal *= (1.0 + ret_roth)
-                    if not is_single:
-                        p2_roth_401k_bal *= (1.0 + ret_roth)
-                        p2_roth_ira_bal *= (1.0 + ret_roth)
+                            p1_roth_401k_bal *= (1.0 + ret_roth)
+                            p1_roth_ira_bal *= (1.0 + ret_roth)
+                            if not is_single:
+                                p2_roth_401k_bal *= (1.0 + ret_roth)
+                                p2_roth_ira_bal *= (1.0 + ret_roth)
 
-                    p1_brok_bal *= (1.0 + ret_brok)
-                    if not is_single:
-                        p2_brok_bal *= (1.0 + ret_brok)
+                            p1_brok_bal *= (1.0 + ret_brok)
+                            if not is_single:
+                                p2_brok_bal *= (1.0 + ret_brok)
 
-                    status_label = "Phase 2 (Levelized)" if age < rmd_start_age else "Phase 3 (RMDs)"
+                            status_label = "Phase 2 (Levelized)" if age < rmd_start_age else "Phase 3 (RMDs)"
 
-                trad_bal_tot_end = (p1_trad_401k_bal + p1_trad_ira_bal) + (p2_trad_401k_bal + p2_trad_ira_bal)
-                roth_bal_tot_end = (p1_roth_401k_bal + p1_roth_ira_bal) + (p2_roth_401k_bal + p2_roth_ira_bal)
-                brok_bal_tot_end = p1_brok_bal + p2_brok_bal
+                        trad_bal_tot_end = (p1_trad_401k_bal + p1_trad_ira_bal) + (p2_trad_401k_bal + p2_trad_ira_bal)
+                        roth_bal_tot_end = (p1_roth_401k_bal + p1_roth_ira_bal) + (p2_roth_401k_bal + p2_roth_ira_bal)
+                        brok_bal_tot_end = p1_brok_bal + p2_brok_bal
                 end_year_total_bal = trad_bal_tot_end + roth_bal_tot_end + brok_bal_tot_end
 
                 trad_growth_tot = growth_p1_trad + growth_p2_trad
