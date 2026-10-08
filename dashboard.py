@@ -2645,9 +2645,9 @@ if not getattr(sys, 'testing', False):
 
 
             # SUBSECTION: PORTFOLIO MILESTONES & SOLVERS
-            st.subheader("Portfolio Milestones & Solvers")
+        st.subheader("Portfolio Milestones & Solvers")
 
-            kpi1, kpi2, kpi3 = st.columns(3)
+        kpi1, kpi2, kpi3 = st.columns(3)
 
         with kpi1:
             st.metric(
