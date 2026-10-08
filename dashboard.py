@@ -2317,7 +2317,7 @@ if not getattr(sys, 'testing', False):
                         trad_bal_tot_end = (p1_trad_401k_bal + p1_trad_ira_bal) + (p2_trad_401k_bal + p2_trad_ira_bal)
                         roth_bal_tot_end = (p1_roth_401k_bal + p1_roth_ira_bal) + (p2_roth_401k_bal + p2_roth_ira_bal)
                         brok_bal_tot_end = p1_brok_bal + p2_brok_bal
-                end_year_total_bal = trad_bal_tot_end + roth_bal_tot_end + brok_bal_tot_end
+                        end_year_total_bal = trad_bal_tot_end + roth_bal_tot_end + brok_bal_tot_end
 
                 trad_growth_tot = growth_p1_trad + growth_p2_trad
                 roth_growth_tot = growth_p1_roth + growth_p2_roth
