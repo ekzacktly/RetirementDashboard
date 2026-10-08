@@ -1761,8 +1761,12 @@ if not getattr(sys, 'testing', False):
                     ) if not is_single else 0.0
                     p2_trad_ira_in = (p2_trad_ira_mo * 12.0) if not is_single else 0.0
 
+                    p1_trad_tot_start_acc = p1_trad_401k_bal + p1_trad_ira_bal
+                    p2_trad_tot_start_acc = p2_trad_401k_bal + p2_trad_ira_bal if not is_single else 0.0
+
                     growth_p1_trad = (p1_trad_401k_bal + p1_trad_401k_in + p1_trad_ira_bal + p1_trad_ira_in) * ret_trad
-                    growth_p2_trad = (p2_trad_401k_bal + p2_trad_401k_in + p2_trad_ira_bal + p2_trad_ira_in) * ret_trad if not is_single else 0.0
+                    growth_p2_trad = (
+                                                 p2_trad_401k_bal + p2_trad_401k_in + p2_trad_ira_bal + p2_trad_ira_in) * ret_trad if not is_single else 0.0
 
                     p1_trad_401k_bal = (p1_trad_401k_bal + p1_trad_401k_in) * (1.0 + ret_trad)
                     p1_trad_ira_bal = (p1_trad_ira_bal + p1_trad_ira_in) * (1.0 + ret_trad)
@@ -1783,7 +1787,8 @@ if not getattr(sys, 'testing', False):
                     p2_roth_ira_in = (p2_roth_ira_mo * 12.0) if not is_single else 0.0
 
                     growth_p1_roth = (p1_roth_401k_bal + p1_roth_401k_in + p1_roth_ira_bal + p1_roth_ira_in) * ret_roth
-                    growth_p2_roth = (p2_roth_401k_bal + p2_roth_401k_in + p2_roth_ira_bal + p2_roth_ira_in) * ret_roth if not is_single else 0.0
+                    growth_p2_roth = (
+                                                 p2_roth_401k_bal + p2_roth_401k_in + p2_roth_ira_bal + p2_roth_ira_in) * ret_roth if not is_single else 0.0
 
                     p1_roth_401k_bal = (p1_roth_401k_bal + p1_roth_401k_in) * (1.0 + ret_roth)
                     p1_roth_ira_bal = (p1_roth_ira_bal + p1_roth_ira_in) * (1.0 + ret_roth)
