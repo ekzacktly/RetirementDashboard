@@ -1602,22 +1602,33 @@ if not getattr(sys, 'testing', False):
 
 
         def run_simulation(
-            test_gross_income: float,
-            return_data: bool = False,
-            allow_negative_brokerage: bool = False,
-            mc_mode: bool = False,
-            mc_vols: dict = None
+                test_gross_income: float,
+                return_data: bool = False,
+                allow_negative_brokerage: bool = False,
+                mc_mode: bool = False,
+                mc_vols: dict = None
         ) -> Union[float, List[float], Dict[str, Any]]:
             sim_data = []
 
-            p1_trad_bal = p1_trad_401k_start + p1_trad_ira_start
-            p2_trad_bal = p2_trad_401k_start + p2_trad_ira_start if not is_single else 0.0
-            p1_roth_bal = p1_roth_401k_start + p1_roth_ira_start
-            p2_roth_bal = p2_roth_401k_start + p2_roth_ira_start if not is_single else 0.0
+            p1_trad_401k_bal = p1_trad_401k_start
+            p1_trad_ira_bal = p1_trad_ira_start
+            p2_trad_401k_bal = p2_trad_401k_start if not is_single else 0.0
+            p2_trad_ira_bal = p2_trad_ira_start if not is_single else 0.0
+
+            p1_roth_401k_bal = p1_roth_401k_start
+            p1_roth_ira_bal = p1_roth_ira_start
+            p2_roth_401k_bal = p2_roth_401k_start if not is_single else 0.0
+            p2_roth_ira_bal = p2_roth_ira_start if not is_single else 0.0
+
             p1_brok_bal = p1_brok_start
             p1_brok_basis = p1_brok_start
             p2_brok_bal = p2_brok_start if not is_single else 0.0
             p2_brok_basis = p2_brok_start if not is_single else 0.0
+
+            p1_trad_bal = p1_trad_401k_bal + p1_trad_ira_bal
+            p2_trad_bal = p2_trad_401k_bal + p2_trad_ira_bal
+            p1_roth_bal = p1_roth_401k_bal + p1_roth_ira_bal
+            p2_roth_bal = p2_roth_401k_bal + p2_roth_ira_bal
 
             curr_p1_sal = p1_salary
             curr_p2_sal = p2_salary if not is_single else 0.0
@@ -1633,7 +1644,6 @@ if not getattr(sys, 'testing', False):
             total_state_tax_retired = 0.0
             total_irmaa_paid = 0.0
             total_ss_received = 0.0
-
             ret_balances_dict = {}
             mc_balance_history = []
             dep_age = "Never"
@@ -1651,8 +1661,8 @@ if not getattr(sys, 'testing', False):
 
                 inf_mult = (1.0 + cpi_rate) ** (age - current_age) if use_cpi else 1.0
 
-                trad_bal_tot_start = p1_trad_bal + p2_trad_bal
-                roth_bal_tot_start = p1_roth_bal + p2_roth_bal
+                trad_bal_tot_start = (p1_trad_401k_bal + p1_trad_ira_bal) + (p2_trad_401k_bal + p2_trad_ira_bal)
+                roth_bal_tot_start = (p1_roth_401k_bal + p1_roth_ira_bal) + (p2_roth_401k_bal + p2_roth_ira_bal)
                 brok_bal_tot_start = p1_brok_bal + p2_brok_bal
                 start_year_total_bal = trad_bal_tot_start + roth_bal_tot_start + brok_bal_tot_start
 
@@ -1717,61 +1727,56 @@ if not getattr(sys, 'testing', False):
                 growth_p2_brok = 0.0
 
                 if not is_retired:
-                    p1_trad_in = (
-                        (curr_p1_sal * p1_trad_401k_cont) +
-                        (curr_p1_sal * p1_trad_401k_match) +
-                        p1_trad_401k_flat +
-                        (p1_trad_ira_mo * 12.0)
+                    p1_trad_401k_in = (
+                            (curr_p1_sal * p1_trad_401k_cont) +
+                            (curr_p1_sal * p1_trad_401k_match) +
+                            p1_trad_401k_flat
                     )
+                    p1_trad_ira_in = p1_trad_ira_mo * 12.0
 
-                    p2_trad_in = (
-                        (curr_p2_sal * p2_trad_401k_cont) +
-                        (curr_p2_sal * p2_trad_401k_match) +
-                        p2_trad_401k_flat +
-                        (p2_trad_ira_mo * 12.0)
+                    p2_trad_401k_in = (
+                            (curr_p2_sal * p2_trad_401k_cont) +
+                            (curr_p2_sal * p2_trad_401k_match) +
+                            p2_trad_401k_flat
                     ) if not is_single else 0.0
+                    p2_trad_ira_in = (p2_trad_ira_mo * 12.0) if not is_single else 0.0
 
-                    growth_p1_trad = (p1_trad_bal + p1_trad_in) * ret_trad
-                    growth_p2_trad = (p2_trad_bal + p2_trad_in) * ret_trad if not is_single else 0.0
-
-                    p1_trad_bal += p1_trad_in + growth_p1_trad
+                    p1_trad_401k_bal = (p1_trad_401k_bal + p1_trad_401k_in) * (1.0 + ret_trad)
+                    p1_trad_ira_bal = (p1_trad_ira_bal + p1_trad_ira_in) * (1.0 + ret_trad)
                     if not is_single:
-                        p2_trad_bal += p2_trad_in + growth_p2_trad
+                        p2_trad_401k_bal = (p2_trad_401k_bal + p2_trad_401k_in) * (1.0 + ret_trad)
+                        p2_trad_ira_bal = (p2_trad_ira_bal + p2_trad_ira_in) * (1.0 + ret_trad)
 
-                    p1_roth_in = (
-                        (curr_p1_sal * p1_roth_401k_cont) +
-                        (curr_p1_sal * p1_roth_401k_match) +
-                        (p1_roth_ira_mo * 12.0)
+                    p1_roth_401k_in = (
+                            (curr_p1_sal * p1_roth_401k_cont) +
+                            (curr_p1_sal * p1_roth_401k_match)
                     )
+                    p1_roth_ira_in = p1_roth_ira_mo * 12.0
 
-                    p2_roth_in = (
-                        (curr_p2_sal * p2_roth_401k_cont) +
-                        (curr_p2_sal * p2_roth_401k_match) +
-                        (p2_roth_ira_mo * 12.0)
+                    p2_roth_401k_in = (
+                            (curr_p2_sal * p2_roth_401k_cont) +
+                            (curr_p2_sal * p2_roth_401k_match)
                     ) if not is_single else 0.0
+                    p2_roth_ira_in = (p2_roth_ira_mo * 12.0) if not is_single else 0.0
 
-                    growth_p1_roth = (p1_roth_bal + p1_roth_in) * ret_roth
-                    growth_p2_roth = (p2_roth_bal + p2_roth_in) * ret_roth if not is_single else 0.0
-
-                    p1_roth_bal += p1_roth_in + growth_p1_roth
+                    p1_roth_401k_bal = (p1_roth_401k_bal + p1_roth_401k_in) * (1.0 + ret_roth)
+                    p1_roth_ira_bal = (p1_roth_ira_bal + p1_roth_ira_in) * (1.0 + ret_roth)
                     if not is_single:
-                        p2_roth_bal += p2_roth_in + growth_p2_roth
+                        p2_roth_401k_bal = (p2_roth_401k_bal + p2_roth_401k_in) * (1.0 + ret_roth)
+                        p2_roth_ira_bal = (p2_roth_ira_bal + p2_roth_ira_in) * (1.0 + ret_roth)
 
                     p1_brok_in = p1_brok_mo * 12.0
                     p2_brok_in = p2_brok_mo * 12.0 if not is_single else 0.0
 
-                    growth_p1_brok = (p1_brok_bal + p1_brok_in) * ret_brok
-                    growth_p2_brok = (p2_brok_bal + p2_brok_in) * ret_brok if not is_single else 0.0
-
-                    p1_brok_bal += p1_brok_in + growth_p1_brok
+                    p1_brok_bal = (p1_brok_bal + p1_brok_in) * (1.0 + ret_brok)
                     p1_brok_basis += p1_brok_in
 
                     if not is_single:
-                        p2_brok_bal += p2_brok_in + growth_p2_brok
+                        p2_brok_bal = (p2_brok_bal + p2_brok_in) * (1.0 + ret_brok)
                         p2_brok_basis += p2_brok_in
 
-                    pre_tax_in_yr = p1_trad_in + p2_trad_in
-                    roth_in_yr = p1_roth_in + p2_roth_in
+                    pre_tax_in_yr = p1_trad_401k_in + p1_trad_ira_in + p2_trad_401k_in + p2_trad_ira_in
+                    roth_in_yr = p1_roth_401k_in + p1_roth_ira_in + p2_roth_401k_in + p2_roth_ira_in
                     brok_in_yr = p1_brok_in + p2_brok_in
 
                     curr_p1_sal *= (1.0 + p1_annual_raise)
@@ -1822,10 +1827,16 @@ if not getattr(sys, 'testing', False):
                         shortfall = current_spend - net_ss
 
                         take_roth = min(roth_bal_tot_start, shortfall)
-                        r1, r2 = withdraw_proportional(take_roth, p1_roth_bal, p2_roth_bal)
-                        p1_roth_bal -= r1
+                        p1_roth_tot = p1_roth_401k_bal + p1_roth_ira_bal
+                        p2_roth_tot = p2_roth_401k_bal + p2_roth_ira_bal
+                        r1, r2 = withdraw_proportional(take_roth, p1_roth_tot, p2_roth_tot)
+                        r1_401k, r1_ira = withdraw_proportional(r1, p1_roth_401k_bal, p1_roth_ira_bal)
+                        p1_roth_401k_bal -= r1_401k
+                        p1_roth_ira_bal -= r1_ira
                         if not is_single:
-                            p2_roth_bal -= r2
+                            r2_401k, r2_ira = withdraw_proportional(r2, p2_roth_401k_bal, p2_roth_ira_bal)
+                            p2_roth_401k_bal -= r2_401k
+                            p2_roth_ira_bal -= r2_ira
                         shortfall -= take_roth
                         roth_out_yr = take_roth
 
@@ -1889,10 +1900,15 @@ if not getattr(sys, 'testing', False):
                             except ValueError:
                                 take_trad = min(trad_bal_tot_start, shortfall * 1.5)
 
-                            t1, t2 = withdraw_proportional(take_trad, p1_trad_bal, p2_trad_bal)
-                            p1_trad_bal -= t1
+                            t1, t2 = withdraw_proportional(take_trad, p1_trad_401k_bal + p1_trad_ira_bal,
+                                                           p2_trad_401k_bal + p2_trad_ira_bal)
+                            t1_401k, t1_ira = withdraw_proportional(t1, p1_trad_401k_bal, p1_trad_ira_bal)
+                            p1_trad_401k_bal -= t1_401k
+                            p1_trad_ira_bal -= t1_ira
                             if not is_single:
-                                p2_trad_bal -= t2
+                                t2_401k, t2_ira = withdraw_proportional(t2, p2_trad_401k_bal, p2_trad_ira_bal)
+                                p2_trad_401k_bal -= t2_401k
+                                p2_trad_ira_bal -= t2_ira
 
                             new_taxable_ss = calc_taxable_ss(
                                 ss_yr,
@@ -1942,11 +1958,16 @@ if not getattr(sys, 'testing', False):
                             irmaa_yr = irmaa_bill
                             total_irmaa_paid += irmaa_bill
 
-                            pull_roth = min(p1_roth_bal + p2_roth_bal, irmaa_bill)
-                            r1, r2 = withdraw_proportional(pull_roth, p1_roth_bal, p2_roth_bal)
-                            p1_roth_bal -= r1
+                            pull_roth = min(roth_bal_tot_start, irmaa_bill)
+                            r1, r2 = withdraw_proportional(pull_roth, p1_roth_401k_bal + p1_roth_ira_bal,
+                                                           p2_roth_401k_bal + p2_roth_ira_bal)
+                            r1_401k, r1_ira = withdraw_proportional(r1, p1_roth_401k_bal, p1_roth_ira_bal)
+                            p1_roth_401k_bal -= r1_401k
+                            p1_roth_ira_bal -= r1_ira
                             if not is_single:
-                                p2_roth_bal -= r2
+                                r2_401k, r2_ira = withdraw_proportional(r2, p2_roth_401k_bal, p2_roth_ira_bal)
+                                p2_roth_401k_bal -= r2_401k
+                                p2_roth_ira_bal -= r2_ira
                             roth_out_yr += pull_roth
 
                             rem_irmaa = irmaa_bill - pull_roth
@@ -1990,17 +2011,21 @@ if not getattr(sys, 'testing', False):
                     growth_p1_brok = p1_brok_bal * ret_brok
                     growth_p2_brok = p2_brok_bal * ret_brok if not is_single else 0.0
 
-                    p1_trad_bal += growth_p1_trad
+                    p1_trad_401k_bal *= (1.0 + ret_trad)
+                    p1_trad_ira_bal *= (1.0 + ret_trad)
                     if not is_single:
-                        p2_trad_bal += growth_p2_trad
+                        p2_trad_401k_bal *= (1.0 + ret_trad)
+                        p2_trad_ira_bal *= (1.0 + ret_trad)
 
-                    p1_roth_bal += growth_p1_roth
+                    p1_roth_401k_bal *= (1.0 + ret_roth)
+                    p1_roth_ira_bal *= (1.0 + ret_roth)
                     if not is_single:
-                        p2_roth_bal += growth_p2_roth
+                        p2_roth_401k_bal *= (1.0 + ret_roth)
+                        p2_roth_ira_bal *= (1.0 + ret_roth)
 
-                    p1_brok_bal += growth_p1_brok
+                    p1_brok_bal *= (1.0 + ret_brok)
                     if not is_single:
-                        p2_brok_bal += growth_p2_brok
+                        p2_brok_bal *= (1.0 + ret_brok)
 
                     status_label = "Phase 1 (Penalty)"
 
@@ -2056,10 +2081,15 @@ if not getattr(sys, 'testing', False):
                     fed_tax_paid_yr += trad_tax_fed
                     state_tax_paid_yr += trad_tax_state
 
-                    t1, t2 = withdraw_proportional(gross_trad, p1_trad_bal, p2_trad_bal)
-                    p1_trad_bal -= t1
+                    t1, t2 = withdraw_proportional(gross_trad, p1_trad_401k_bal + p1_trad_ira_bal,
+                                                   p2_trad_401k_bal + p2_trad_ira_bal)
+                    t1_401k, t1_ira = withdraw_proportional(t1, p1_trad_401k_bal, p1_trad_ira_bal)
+                    p1_trad_401k_bal -= t1_401k
+                    p1_trad_ira_bal -= t1_ira
                     if not is_single:
-                        p2_trad_bal -= t2
+                        t2_401k, t2_ira = withdraw_proportional(t2, p2_trad_401k_bal, p2_trad_ira_bal)
+                        p2_trad_401k_bal -= t2_401k
+                        p2_trad_ira_bal -= t2_ira
 
                     gains_realized = 0.0
 
@@ -2080,10 +2110,10 @@ if not getattr(sys, 'testing', False):
                             brok_in_yr = surplus - roth_in_yr
 
                             if is_single:
-                                p1_roth_bal += roth_in_yr
+                                p1_roth_ira_bal += roth_in_yr
                             else:
-                                p1_roth_bal += roth_in_yr / 2.0
-                                p2_roth_bal += roth_in_yr / 2.0
+                                p1_roth_ira_bal += roth_in_yr / 2.0
+                                p2_roth_ira_bal += roth_in_yr / 2.0
 
                             total_roth_conv_net += roth_in_yr
 
@@ -2125,10 +2155,15 @@ if not getattr(sys, 'testing', False):
                         shortfall = current_spend - net_trad_and_ss
 
                         take_roth = min(roth_bal_tot_start, shortfall)
-                        r1, r2 = withdraw_proportional(take_roth, p1_roth_bal, p2_roth_bal)
-                        p1_roth_bal -= r1
+                        r1, r2 = withdraw_proportional(take_roth, p1_roth_401k_bal + p1_roth_ira_bal,
+                                                       p2_roth_401k_bal + p2_roth_ira_bal)
+                        r1_401k, r1_ira = withdraw_proportional(r1, p1_roth_401k_bal, p1_roth_ira_bal)
+                        p1_roth_401k_bal -= r1_401k
+                        p1_roth_ira_bal -= r1_ira
                         if not is_single:
-                            p2_roth_bal -= r2
+                            r2_401k, r2_ira = withdraw_proportional(r2, p2_roth_401k_bal, p2_roth_ira_bal)
+                            p2_roth_401k_bal -= r2_401k
+                            p2_roth_ira_bal -= r2_ira
 
                         shortfall -= take_roth
                         roth_out_yr = take_roth
@@ -2179,11 +2214,16 @@ if not getattr(sys, 'testing', False):
                             irmaa_yr = irmaa_bill
                             total_irmaa_paid += irmaa_bill
 
-                            pull_roth = min(p1_roth_bal + p2_roth_bal, irmaa_bill)
-                            r1, r2 = withdraw_proportional(pull_roth, p1_roth_bal, p2_roth_bal)
-                            p1_roth_bal -= r1
+                            pull_roth = min(roth_bal_tot_start, irmaa_bill)
+                            r1, r2 = withdraw_proportional(pull_roth, p1_roth_401k_bal + p1_roth_ira_bal,
+                                                           p2_roth_401k_bal + p2_roth_ira_bal)
+                            r1_401k, r1_ira = withdraw_proportional(r1, p1_roth_401k_bal, p1_roth_ira_bal)
+                            p1_roth_401k_bal -= r1_401k
+                            p1_roth_ira_bal -= r1_ira
                             if not is_single:
-                                p2_roth_bal -= r2
+                                r2_401k, r2_ira = withdraw_proportional(r2, p2_roth_401k_bal, p2_roth_ira_bal)
+                                p2_roth_401k_bal -= r2_401k
+                                p2_roth_ira_bal -= r2_ira
                             roth_out_yr += pull_roth
 
                             rem_irmaa = irmaa_bill - pull_roth
@@ -2227,22 +2267,26 @@ if not getattr(sys, 'testing', False):
                     growth_p1_brok = p1_brok_bal * ret_brok
                     growth_p2_brok = p2_brok_bal * ret_brok if not is_single else 0.0
 
-                    p1_trad_bal += growth_p1_trad
+                    p1_trad_401k_bal *= (1.0 + ret_trad)
+                    p1_trad_ira_bal *= (1.0 + ret_trad)
                     if not is_single:
-                        p2_trad_bal += growth_p2_trad
+                        p2_trad_401k_bal *= (1.0 + ret_trad)
+                        p2_trad_ira_bal *= (1.0 + ret_trad)
 
-                    p1_roth_bal += growth_p1_roth
+                    p1_roth_401k_bal *= (1.0 + ret_roth)
+                    p1_roth_ira_bal *= (1.0 + ret_roth)
                     if not is_single:
-                        p2_roth_bal += growth_p2_roth
+                        p2_roth_401k_bal *= (1.0 + ret_roth)
+                        p2_roth_ira_bal *= (1.0 + ret_roth)
 
-                    p1_brok_bal += growth_p1_brok
+                    p1_brok_bal *= (1.0 + ret_brok)
                     if not is_single:
-                        p2_brok_bal += growth_p2_brok
+                        p2_brok_bal *= (1.0 + ret_brok)
 
                     status_label = "Phase 2 (Levelized)" if age < rmd_start_age else "Phase 3 (RMDs)"
 
-                trad_bal_tot_end = p1_trad_bal + p2_trad_bal
-                roth_bal_tot_end = p1_roth_bal + p2_roth_bal
+                trad_bal_tot_end = (p1_trad_401k_bal + p1_trad_ira_bal) + (p2_trad_401k_bal + p2_trad_ira_bal)
+                roth_bal_tot_end = (p1_roth_401k_bal + p1_roth_ira_bal) + (p2_roth_401k_bal + p2_roth_ira_bal)
                 brok_bal_tot_end = p1_brok_bal + p2_brok_bal
                 end_year_total_bal = trad_bal_tot_end + roth_bal_tot_end + brok_bal_tot_end
 
@@ -2292,7 +2336,17 @@ if not getattr(sys, 'testing', False):
                         round(cg_tax_paid_yr),
                         round(state_tax_paid_yr),
                         round(irmaa_yr),
-                        round(penalty_paid_yr)
+                        round(penalty_paid_yr),
+                        round(p1_trad_401k_bal),
+                        round(p1_trad_ira_bal),
+                        round(p1_roth_401k_bal),
+                        round(p1_roth_ira_bal),
+                        round(p1_brok_bal),
+                        round(p2_trad_401k_bal),
+                        round(p2_trad_ira_bal),
+                        round(p2_roth_401k_bal),
+                        round(p2_roth_ira_bal),
+                        round(p2_brok_bal)
                     ])
 
                 if age == target_lifespan:
@@ -2401,7 +2455,17 @@ if not getattr(sys, 'testing', False):
             "Fed Cap Gains Tax",
             "State Tax",
             "IRMAA Surcharge",
-            "10% Penalty"
+            "10% Penalty",
+            "P1 Trad 401(k)",
+            "P1 Trad IRA",
+            "P1 Roth 401(k)",
+            "P1 Roth IRA",
+            "P1 Brokerage",
+            "P2 Trad 401(k)",
+            "P2 Trad IRA",
+            "P2 Roth 401(k)",
+            "P2 Roth IRA",
+            "P2 Brokerage"
         ])
 
         end_of_life_balance = df[df["Age"] == target_lifespan]["Total Ending"].iloc[0] if not df.empty else 0.0
@@ -2785,21 +2849,46 @@ if not getattr(sys, 'testing', False):
 
         st.subheader("Account Balances Over Time")
 
-        y_cols = ["Trad Ending", "Roth Ending", "Brok Ending"]
-        chart_data = df[["Age"] + y_cols] if not df.empty else pd.DataFrame()
+        potential_cols = [
+            "P1 Trad 401(k)",
+            "P1 Trad IRA",
+            "P1 Roth 401(k)",
+            "P1 Roth IRA",
+            "P1 Brokerage"
+        ]
+        if not is_single:
+            potential_cols.extend([
+                "P2 Trad 401(k)",
+                "P2 Trad IRA",
+                "P2 Roth 401(k)",
+                "P2 Roth IRA",
+                "P2 Brokerage"
+            ])
 
-        if not chart_data.empty:
-            final_row = df.iloc[-1]
-            y_cols.sort(key=lambda x: final_row[x], reverse=True)
+        # Filter out accounts that never had any money in them
+        active_cols = [col for col in potential_cols if col in df.columns and df[col].max() > 0]
+
+        if not df.empty and active_cols:
+            chart_data = df[["Age"] + active_cols]
 
             fig = px.area(
                 chart_data,
                 x="Age",
-                y=y_cols,
-                labels={"value": "Account Balance ($)", "variable": "Account Bucket"}
+                y=active_cols,
+                labels={"value": "Account Balance ($)", "variable": "Account"}
+            )
+
+            fig.update_layout(
+                yaxis_title="Account Balance ($)",
+                xaxis_title="Age",
+                legend_title_text="Account",
+                height=450,
+                margin=dict(t=30, b=0, l=0, r=0)
             )
 
             st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No active accounts with balances to display.")
 
         # ==========================================
         # SECTION 8: LIFETIME PROJECTION & AUTOMATED WATERFALL
