@@ -2873,27 +2873,37 @@ if not getattr(sys, 'testing', False):
         active_cols = [col for col in potential_cols if col in df.columns and df[col].max() > 0]
 
         if not df.empty and active_cols:
-            # Sort active columns by balance at retirement in descending order
-            # (First column is placed on the bottom of the stack, subsequent columns stack on top)
+            # Determine balances at retirement age (or max across lifespan if retirement row isn't found)
             ret_row = df[df["Age"] == retire_age]
             if not ret_row.empty:
-                active_cols.sort(key=lambda col: ret_row[col].iloc[0], reverse=True)
+                # Largest balance at retirement goes first (base layer at y=0)
+                active_cols.sort(key=lambda col: float(ret_row[col].iloc[0]), reverse=True)
             else:
-                active_cols.sort(key=lambda col: df[col].max(), reverse=True)
+                active_cols.sort(key=lambda col: float(df[col].max()), reverse=True)
 
-            chart_data = df[["Age"] + active_cols]
+            # Reshape data to long format so category_orders explicitly dictates bottom-to-top stacking
+            df_chart_long = df.melt(
+                id_vars=["Age"],
+                value_vars=active_cols,
+                var_name="Account",
+                value_name="Balance"
+            )
 
             fig = px.area(
-                chart_data,
+                df_chart_long,
                 x="Age",
-                y=active_cols,
-                labels={"value": "Account Balance ($)", "variable": "Account"}
+                y="Balance",
+                color="Account",
+                category_orders={"Account": active_cols}
             )
 
             fig.update_layout(
                 yaxis_title="Account Balance ($)",
                 xaxis_title="Age",
-                legend_title_text="Account",
+                legend=dict(
+                    title_text="Account",
+                    traceorder="reversed"  # Legend top-to-bottom mirrors visual stack top-to-bottom
+                ),
                 height=450,
                 margin=dict(t=30, b=0, l=0, r=0)
             )
@@ -2901,7 +2911,6 @@ if not getattr(sys, 'testing', False):
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No active accounts with balances to display.")
-
         # ==========================================
         # SECTION 8: LIFETIME PROJECTION & AUTOMATED WATERFALL
         # ==========================================
