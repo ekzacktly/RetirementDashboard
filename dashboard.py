@@ -546,10 +546,10 @@ def withdraw_from_dual_brokerage_dynamic(
             net_provided = net_needed
 
     nb1 = b1 - d1_draw
-    nbasis1 = basis1 - (d1_draw * (basis1 / b1)) if b1 > 0 else basis1
+    nbasis1 = max(0.0, basis1 - (d1_draw * (basis1 / b1))) if b1 > 0 else max(0.0, basis1)
 
     nb2 = b2 - d2_draw
-    nbasis2 = basis2 - (d2_draw * (basis2 / b2)) if b2 > 0 else basis2
+    nbasis2 = max(0.0, basis2 - (d2_draw * (basis2 / b2))) if b2 > 0 else max(0.0, basis2)
 
     return (
         float(net_provided),
@@ -2152,7 +2152,7 @@ if not getattr(sys, 'testing', False):
                             total_roth_conv_net += roth_in_yr
 
                             total_tax_roth += (
-                                trad_tax_fed * (roth_in_yr / net_trad_and_ss)
+                                    trad_tax_fed * (roth_in_yr / net_trad_and_ss)
                             ) if net_trad_and_ss > 0 else 0.0
 
                             if brok_in_yr > 0:
