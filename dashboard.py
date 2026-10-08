@@ -2899,7 +2899,7 @@ if not getattr(sys, 'testing', False):
 
         if not df.empty and active_cols:
             # Determine balances at retirement age (or max across lifespan if retirement row isn't found)
-            ret_row = df[df["Age"] == retire_age]
+            ret_row = df[df["Age"] == retire_age-1]
             if not ret_row.empty:
                 # Largest balance at retirement goes first (base layer at y=0)
                 active_cols.sort(key=lambda col: float(ret_row[col].iloc[0]), reverse=True)
