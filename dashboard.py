@@ -2507,7 +2507,10 @@ if not getattr(sys, 'testing', False):
                 st.markdown(f"- **Total Employer (% Matches):** \\${p1_trad_match_mo + p1_roth_match_mo:,.0f}")
                 if show_trad_401k:
                     st.markdown(f"- **Total Employer (Flat/Bonus):** \\${p1_flat_mo:,.0f}")
+                diff_sign = "+" if total_tax_differential_mo > 0 else "-"
                 st.metric("Total Monthly Saved", f"${total_saved:,.0f}")
+                st.markdown(f"- **Total Tax Differential:** \\${diff_sign}${abs(total_tax_differential_mo):,.0f} / mo")
+                st.markdown(f"- **Total Tax Burden:** \\${total_tax_burden_mo:,.0f} / mo")
 
                 st.markdown("---")
                 st.markdown("**Monthly Tax Implications:**")
