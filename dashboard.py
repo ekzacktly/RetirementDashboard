@@ -2512,12 +2512,6 @@ if not getattr(sys, 'testing', False):
                 st.markdown(f"- **Total Tax Differential:** \\${diff_sign}${abs(total_tax_differential_mo):,.0f} / mo")
                 st.markdown(f"- **Total Tax Burden:** \\${total_tax_burden_mo:,.0f} / mo")
 
-                st.markdown("---")
-                st.markdown("**Monthly Tax Implications:**")
-                diff_sign = "+" if total_tax_differential_mo > 0 else "-"
-                st.metric("Total Tax Differential", f"{diff_sign}${abs(total_tax_differential_mo):,.0f} / mo")
-                st.metric("Total Tax Burden", f"${total_tax_burden_mo:,.0f} / mo")
-
         else:
             cont_col1, cont_col2, cont_col3 = st.columns(3)
 
