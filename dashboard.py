@@ -82,6 +82,7 @@ config = {
     "show_roth_ira": True,
     "show_brokerage": True,
     "p1_salary": 70000,
+    "p1_bonus": 0,
     "p1_annual_raise": 2.5,
     "p1_trad_401k_start": 45000,
     "p1_trad_401k_cont": 6.0,
@@ -97,6 +98,7 @@ config = {
     "p1_brok_start": 2000,
     "p1_brok_mo": 0,
     "p2_salary": 65000,
+    "p2_bonus": 0,
     "p2_annual_raise": 2.5,
     "p2_trad_401k_start": 35000,
     "p2_trad_401k_cont": 6.0,
@@ -809,6 +811,13 @@ if not getattr(sys, 'testing', False):
                 help="Gross annual salary for Person 1."
             )
 
+            p1_bonus = st.number_input(
+                "Person 1 Annual Bonus ($)",
+                value=float(config.get("p1_bonus", 0.0)),
+                step=1000.0,
+                help="Expected annual cash bonus (non-401k eligible) for Person 1."
+            )
+
             p1_annual_raise = st.number_input(
                 "P1 Annual Raise (%)",
                 value=float(config.get("p1_annual_raise", 2.5)),
@@ -823,6 +832,14 @@ if not getattr(sys, 'testing', False):
                 step=5000.0,
                 disabled=is_single,
                 help="Gross annual salary for Person 2."
+            )
+
+            p2_bonus = st.number_input(
+                "Person 2 Annual Bonus ($)",
+                value=float(config.get("p2_bonus", 0.0)),
+                step=1000.0,
+                disabled=is_single,
+                help="Expected annual cash bonus (non-401k eligible) for Person 2."
             )
 
             p2_annual_raise = st.number_input(
@@ -903,13 +920,13 @@ if not getattr(sys, 'testing', False):
 
             with ss_col1:
                 st.markdown("#### Person 1")
-                p1_est_pia = estimate_pia(p1_salary)
+                p1_est_pia = estimate_pia(p1_salary + p1_bonus)
 
                 p1_fra_benefit = st.number_input(
                     "P1 FRA Base Benefit ($/mo)",
                     value=int(config.get("p1_fra_benefit", int(p1_est_pia))),
                     step=100,
-                    help=f"Your Primary Insurance Amount (PIA) at exactly age 67. Based on your current salary of \\${p1_salary:,.0f}, an IRS Bend Point estimate is \\${int(p1_est_pia):,.0f}/mo. The engine uses this purely as a starting base—it will mathematically reduce or increase this amount based on your Claiming Age slider below."
+                    help=f"Your Primary Insurance Amount (PIA) at exactly age 67. Based on your current income of \\${(p1_salary + p1_bonus):,.0f}, an IRS Bend Point estimate is \\${int(p1_est_pia):,.0f}/mo. The engine uses this purely as a starting base—it will mathematically reduce or increase this amount based on your Claiming Age slider below."
                 )
 
                 p1_ss_age = st.slider(
@@ -929,13 +946,13 @@ if not getattr(sys, 'testing', False):
                     p2_final_mo = 0.0
                 else:
                     st.markdown("#### Person 2")
-                    p2_est_pia = estimate_pia(p2_salary)
+                    p2_est_pia = estimate_pia(p2_salary + p2_bonus)
 
                     p2_fra_benefit = st.number_input(
                         "P2 FRA Base Benefit ($/mo)",
                         value=int(config.get("p2_fra_benefit", int(p2_est_pia))),
                         step=100,
-                        help=f"Your Primary Insurance Amount (PIA) at exactly age 67. Based on your current salary of \\${p2_salary:,.0f}, an IRS Bend Point estimate is \\${int(p2_est_pia):,.0f}/mo. The engine uses this purely as a starting base—it will mathematically reduce or increase this amount based on your Claiming Age slider below."
+                        help=f"Your Primary Insurance Amount (PIA) at exactly age 67. Based on your current income of \\${(p2_salary + p2_bonus):,.0f}, an IRS Bend Point estimate is \\${int(p2_est_pia):,.0f}/mo. The engine uses this purely as a starting base—it will mathematically reduce or increase this amount based on your Claiming Age slider below."
                     )
 
                     p2_ss_age = st.slider(
@@ -1522,6 +1539,7 @@ if not getattr(sys, 'testing', False):
             "brok_glide_profile": brok_glide_profile,
             "rmd_start_age": rmd_start_age,
             "p1_salary": p1_salary,
+            "p1_bonus": p1_bonus,
             "p1_annual_raise": round(p1_annual_raise * 100, 2),
             "use_ss": use_ss,
             "ss_payout_scenario": ss_payout_scenario if use_ss else "100% (Scheduled Benefits)",
@@ -1546,6 +1564,7 @@ if not getattr(sys, 'testing', False):
             "p1_brok_start": p1_brok_start,
             "p1_brok_mo": p1_brok_mo,
             "p2_salary": p2_salary if not is_single else 0.0,
+            "p2_bonus": p2_bonus if not is_single else 0.0,
             "p2_annual_raise": round(p2_annual_raise * 100, 2) if not is_single else 0.0,
             "p2_fra_benefit": p2_fra_benefit if not is_single else 0.0,
             "p2_ss_age": p2_ss_age if not is_single else 67,
@@ -2385,7 +2404,6 @@ if not getattr(sys, 'testing', False):
             "10% Penalty"
         ])
 
-        # ... existing code ...
         end_of_life_balance = df[df["Age"] == target_lifespan]["Total Ending"].iloc[0] if not df.empty else 0.0
 
         st.header("7. Lifetime Summary & KPIs")
@@ -2405,6 +2423,25 @@ if not getattr(sys, 'testing', False):
 
         p1_flat_mo = p1_trad_401k_flat / 12.0
         p2_flat_mo = p2_trad_401k_flat / 12.0 if not is_single else 0.0
+
+        # Tax Impact Calculations
+        gross_wage_total_for_tax = p1_salary + p1_bonus + (p2_salary + p2_bonus if not is_single else 0.0)
+
+        temp_pre_tax_deductions = (p1_trad_401k_mo + p2_trad_401k_mo + p1_trad_ira_mo + p2_trad_ira_mo) * 12.0
+        temp_roth_matches = (p1_roth_match_mo + p2_roth_match_mo) * 12.0
+        temp_taxable_gross = max(0.0, gross_wage_total_for_tax - temp_pre_tax_deductions + temp_roth_matches)
+
+        marginal_fed_rate = get_marginal_rate(temp_taxable_gross, is_single)
+        state_relief_rate = 0.0 if state_choice == "Pennsylvania" else state_tax_decimal
+
+        fed_tax_annual = calc_fed_tax(temp_taxable_gross, 1.0, is_single)
+        if state_choice == "Pennsylvania":
+            state_tax_annual = (gross_wage_total_for_tax + temp_roth_matches) * state_tax_decimal
+        else:
+            state_tax_annual = temp_taxable_gross * state_tax_decimal
+        local_tax_annual = (gross_wage_total_for_tax + temp_roth_matches) * local_tax_decimal
+
+        total_tax_burden_mo = (fed_tax_annual + state_tax_annual + local_tax_annual) / 12.0
 
         total_employee = (
                 p1_trad_401k_mo +
@@ -2429,25 +2466,6 @@ if not getattr(sys, 'testing', False):
         )
 
         total_saved = total_employee + total_employer
-
-        # Tax Impact Calculations
-        gross_wage_total_for_tax = p1_salary + (p2_salary if not is_single else 0.0)
-
-        temp_pre_tax_deductions = (p1_trad_401k_mo + p2_trad_401k_mo + p1_trad_ira_mo + p2_trad_ira_mo) * 12.0
-        temp_roth_matches = (p1_roth_match_mo + p2_roth_match_mo) * 12.0
-        temp_taxable_gross = max(0.0, gross_wage_total_for_tax - temp_pre_tax_deductions + temp_roth_matches)
-
-        marginal_fed_rate = get_marginal_rate(temp_taxable_gross, is_single)
-        state_relief_rate = 0.0 if state_choice == "Pennsylvania" else state_tax_decimal
-
-        fed_tax_annual = calc_fed_tax(temp_taxable_gross, 1.0, is_single)
-        if state_choice == "Pennsylvania":
-            state_tax_annual = (gross_wage_total_for_tax + temp_roth_matches) * state_tax_decimal
-        else:
-            state_tax_annual = temp_taxable_gross * state_tax_decimal
-        local_tax_annual = (gross_wage_total_for_tax + temp_roth_matches) * local_tax_decimal
-
-        total_tax_burden_mo = (fed_tax_annual + state_tax_annual + local_tax_annual) / 12.0
 
 
         def calc_diff(amount_mo: float, is_deduction: bool) -> float:
@@ -2559,7 +2577,7 @@ if not getattr(sys, 'testing', False):
         # SUBSECTION: CURRENT TAX & PAYCHECK ARBITRAGE
         with st.expander("Current Tax & Paycheck Arbitrage", expanded=True):
 
-            gross_wage_total = p1_salary + (p2_salary if not is_single else 0.0)
+            gross_wage_total = p1_salary + p1_bonus + (p2_salary + p2_bonus if not is_single else 0.0)
 
             current_trad_401k_employee = p1_salary * p1_trad_401k_cont
             if not is_single:
