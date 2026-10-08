@@ -704,13 +704,6 @@ if not getattr(sys, 'testing', False):
     # DASHBOARD UI SETUP
     st.title("Auto-Optimized Retirement Engine")
 
-    if profile_loaded_name:
-        st.success(f"✅ Successfully loaded configuration: `{profile_loaded_name}`")
-    else:
-        st.info(
-            "ℹ️ Using standard generic defaults. You can upload a custom `my_profile.json` in the sidebar to load your exact numbers."
-        )
-
     tab1, tab2, tab3, tab4 = st.tabs([
         " Retirement Dashboard",
         " User Manual & Explainer",
@@ -2392,12 +2385,13 @@ if not getattr(sys, 'testing', False):
             "10% Penalty"
         ])
 
+        # ... existing code ...
         end_of_life_balance = df[df["Age"] == target_lifespan]["Total Ending"].iloc[0] if not df.empty else 0.0
 
         st.header("7. Lifetime Summary & KPIs")
 
         # SUBSECTION: MONTHLY SAVINGS BREAKDOWN
-        st.subheader("Current Monthly Savings Breakdown")
+        st.subheader("Current Monthly Savings & Tax Liability Breakdown")
 
         p1_trad_401k_mo = (p1_salary * p1_trad_401k_cont) / 12.0
         p1_roth_401k_mo = (p1_salary * p1_roth_401k_cont) / 12.0
@@ -2413,34 +2407,83 @@ if not getattr(sys, 'testing', False):
         p2_flat_mo = p2_trad_401k_flat / 12.0 if not is_single else 0.0
 
         total_employee = (
-            p1_trad_401k_mo +
-            p1_roth_401k_mo +
-            p1_trad_ira_mo +
-            p1_roth_ira_mo +
-            p1_brok_mo +
-            p2_trad_401k_mo +
-            p2_roth_401k_mo +
-            p2_trad_ira_mo +
-            p2_roth_ira_mo +
-            p2_brok_mo
+                p1_trad_401k_mo +
+                p1_roth_401k_mo +
+                p1_trad_ira_mo +
+                p1_roth_ira_mo +
+                p1_brok_mo +
+                p2_trad_401k_mo +
+                p2_roth_401k_mo +
+                p2_trad_ira_mo +
+                p2_roth_ira_mo +
+                p2_brok_mo
         )
 
         total_employer = (
-            p1_trad_match_mo +
-            p1_roth_match_mo +
-            p1_flat_mo +
-            p2_trad_match_mo +
-            p2_roth_match_mo +
-            p2_flat_mo
+                p1_trad_match_mo +
+                p1_roth_match_mo +
+                p1_flat_mo +
+                p2_trad_match_mo +
+                p2_roth_match_mo +
+                p2_flat_mo
         )
 
         total_saved = total_employee + total_employer
 
+        # Tax Impact Calculations
+        gross_wage_total_for_tax = p1_salary + (p2_salary if not is_single else 0.0)
 
-        def fmt_row(label: str, val: float, match_val: float = 0.0) -> str:
+        temp_pre_tax_deductions = (p1_trad_401k_mo + p2_trad_401k_mo + p1_trad_ira_mo + p2_trad_ira_mo) * 12.0
+        temp_roth_matches = (p1_roth_match_mo + p2_roth_match_mo) * 12.0
+        temp_taxable_gross = max(0.0, gross_wage_total_for_tax - temp_pre_tax_deductions + temp_roth_matches)
+
+        marginal_fed_rate = get_marginal_rate(temp_taxable_gross, is_single)
+        state_relief_rate = 0.0 if state_choice == "Pennsylvania" else state_tax_decimal
+
+        fed_tax_annual = calc_fed_tax(temp_taxable_gross, 1.0, is_single)
+        if state_choice == "Pennsylvania":
+            state_tax_annual = (gross_wage_total_for_tax + temp_roth_matches) * state_tax_decimal
+        else:
+            state_tax_annual = temp_taxable_gross * state_tax_decimal
+        local_tax_annual = (gross_wage_total_for_tax + temp_roth_matches) * local_tax_decimal
+
+        total_tax_burden_mo = (fed_tax_annual + state_tax_annual + local_tax_annual) / 12.0
+
+
+        def calc_diff(amount_mo: float, is_deduction: bool) -> float:
+            if amount_mo == 0:
+                return 0.0
+            if is_deduction:
+                return -amount_mo * (marginal_fed_rate + state_relief_rate)
+            else:
+                return amount_mo * (marginal_fed_rate + state_tax_decimal + local_tax_decimal)
+
+
+        p1_trad_401k_diff = calc_diff(p1_trad_401k_mo, True)
+        p1_trad_ira_diff = calc_diff(p1_trad_ira_mo, True)
+        p1_roth_match_diff = calc_diff(p1_roth_match_mo, False)
+
+        p2_trad_401k_diff = calc_diff(p2_trad_401k_mo, True)
+        p2_trad_ira_diff = calc_diff(p2_trad_ira_mo, True)
+        p2_roth_match_diff = calc_diff(p2_roth_match_mo, False)
+
+        total_tax_differential_mo = (
+                p1_trad_401k_diff + p1_trad_ira_diff + p1_roth_match_diff +
+                p2_trad_401k_diff + p2_trad_ira_diff + p2_roth_match_diff
+        )
+
+
+        def fmt_row(label: str, val: float, match_val: float = 0.0, tax_diff: float = 0.0) -> str:
+            diff_str = ""
+            if abs(tax_diff) >= 1.0:
+                sign = "+" if tax_diff > 0 else "-"
+                diff_str = f" | *Tax: {sign}\\${abs(tax_diff):,.0f}*"
+            else:
+                diff_str = " | *Tax: \\$0*"
+
             if match_val > 0:
-                return f"- {label}: \\${val:,.0f} *(+ \\${match_val:,.0f} Match)*"
-            return f"- {label}: \\${val:,.0f}"
+                return f"- {label}: \\${val:,.0f} *(+ \\${match_val:,.0f} Match)*{diff_str}"
+            return f"- {label}: \\${val:,.0f}{diff_str}"
 
 
         if is_single:
@@ -2449,11 +2492,11 @@ if not getattr(sys, 'testing', False):
             with cont_col1:
                 st.markdown("**Person 1 Monthly Savings:**")
                 if show_trad_401k:
-                    st.markdown(fmt_row("Trad 401(k)", p1_trad_401k_mo, p1_trad_match_mo))
+                    st.markdown(fmt_row("Trad 401(k)", p1_trad_401k_mo, p1_trad_match_mo, p1_trad_401k_diff))
                 if show_trad_ira:
-                    st.markdown(fmt_row("Trad IRA", p1_trad_ira_mo))
+                    st.markdown(fmt_row("Trad IRA", p1_trad_ira_mo, 0.0, p1_trad_ira_diff))
                 if show_roth_401k:
-                    st.markdown(fmt_row("Roth 401(k)", p1_roth_401k_mo, p1_roth_match_mo))
+                    st.markdown(fmt_row("Roth 401(k)", p1_roth_401k_mo, p1_roth_match_mo, p1_roth_match_diff))
                 if show_roth_ira:
                     st.markdown(fmt_row("Roth IRA", p1_roth_ira_mo))
                 if show_brokerage:
@@ -2466,17 +2509,23 @@ if not getattr(sys, 'testing', False):
                     st.markdown(f"- **Total Employer (Flat/Bonus):** \\${p1_flat_mo:,.0f}")
                 st.metric("Total Monthly Saved", f"${total_saved:,.0f}")
 
+                st.markdown("---")
+                st.markdown("**Monthly Tax Implications:**")
+                diff_sign = "+" if total_tax_differential_mo > 0 else "-"
+                st.metric("Total Tax Differential", f"{diff_sign}${abs(total_tax_differential_mo):,.0f} / mo")
+                st.metric("Total Tax Burden", f"${total_tax_burden_mo:,.0f} / mo")
+
         else:
             cont_col1, cont_col2, cont_col3 = st.columns(3)
 
             with cont_col1:
                 st.markdown("**Person 1 Monthly Savings:**")
                 if show_trad_401k:
-                    st.markdown(fmt_row("Trad 401(k)", p1_trad_401k_mo, p1_trad_match_mo))
+                    st.markdown(fmt_row("Trad 401(k)", p1_trad_401k_mo, p1_trad_match_mo, p1_trad_401k_diff))
                 if show_trad_ira:
-                    st.markdown(fmt_row("Trad IRA", p1_trad_ira_mo))
+                    st.markdown(fmt_row("Trad IRA", p1_trad_ira_mo, 0.0, p1_trad_ira_diff))
                 if show_roth_401k:
-                    st.markdown(fmt_row("Roth 401(k)", p1_roth_401k_mo, p1_roth_match_mo))
+                    st.markdown(fmt_row("Roth 401(k)", p1_roth_401k_mo, p1_roth_match_mo, p1_roth_match_diff))
                 if show_roth_ira:
                     st.markdown(fmt_row("Roth IRA", p1_roth_ira_mo))
                 if show_brokerage:
@@ -2485,11 +2534,11 @@ if not getattr(sys, 'testing', False):
             with cont_col2:
                 st.markdown("**Person 2 Monthly Savings:**")
                 if show_trad_401k:
-                    st.markdown(fmt_row("Trad 401(k)", p2_trad_401k_mo, p2_trad_match_mo))
+                    st.markdown(fmt_row("Trad 401(k)", p2_trad_401k_mo, p2_trad_match_mo, p2_trad_401k_diff))
                 if show_trad_ira:
-                    st.markdown(fmt_row("Trad IRA", p2_trad_ira_mo))
+                    st.markdown(fmt_row("Trad IRA", p2_trad_ira_mo, 0.0, p2_trad_ira_diff))
                 if show_roth_401k:
-                    st.markdown(fmt_row("Roth 401(k)", p2_roth_401k_mo, p2_roth_match_mo))
+                    st.markdown(fmt_row("Roth 401(k)", p2_roth_401k_mo, p2_roth_match_mo, p2_roth_match_diff))
                 if show_roth_ira:
                     st.markdown(fmt_row("Roth IRA", p2_roth_ira_mo))
                 if show_brokerage:
@@ -2505,187 +2554,95 @@ if not getattr(sys, 'testing', False):
                     st.markdown(f"- **Total Employer (Flat/Bonus):** \\${p1_flat_mo + p2_flat_mo:,.0f}")
                 st.metric("Total Monthly Saved", f"${total_saved:,.0f}")
 
-            st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("---")
+                st.markdown("**Monthly Tax Implications:**")
+                diff_sign = "+" if total_tax_differential_mo > 0 else "-"
+                st.metric("Total Tax Differential", f"{diff_sign}${abs(total_tax_differential_mo):,.0f} / mo")
+                st.metric("Total Tax Burden", f"${total_tax_burden_mo:,.0f} / mo")
 
-            # SUBSECTION: CURRENT TAX & PAYCHECK ARBITRAGE
-            with st.expander("Current Tax & Paycheck Arbitrage", expanded=True):
+        st.markdown("<br>", unsafe_allow_html=True)
 
-                gross_wage_total = p1_salary + (p2_salary if not is_single else 0.0)
+        # SUBSECTION: CURRENT TAX & PAYCHECK ARBITRAGE
+        with st.expander("Current Tax & Paycheck Arbitrage", expanded=True):
 
-                current_trad_401k_employee = p1_salary * p1_trad_401k_cont
-                if not is_single:
-                    current_trad_401k_employee += p2_salary * p2_trad_401k_cont
+            gross_wage_total = p1_salary + (p2_salary if not is_single else 0.0)
 
-                current_trad_ira_annual = p1_trad_ira_mo * 12.0
-                if not is_single:
-                    current_trad_ira_annual += p2_trad_ira_mo * 12.0
+            current_trad_401k_employee = p1_salary * p1_trad_401k_cont
+            if not is_single:
+                current_trad_401k_employee += p2_salary * p2_trad_401k_cont
 
-                current_pre_tax_deductions_now = current_trad_401k_employee + current_trad_ira_annual
+            current_trad_ira_annual = p1_trad_ira_mo * 12.0
+            if not is_single:
+                current_trad_ira_annual += p2_trad_ira_mo * 12.0
 
-                # Current federal taxes with existing Traditional contributions.
-                taxable_gross_now = max(0.0, gross_wage_total - current_pre_tax_deductions_now)
-                actual_fed_tax_now = calc_fed_tax(taxable_gross_now, 1.0, is_single)
+            current_pre_tax_deductions_now = current_trad_401k_employee + current_trad_ira_annual
 
-                # Current-year federal tax savings from Traditional contributions.
-                base_fed_tax_now = calc_fed_tax(gross_wage_total, 1.0, is_single)
-                tax_savings_yr = base_fed_tax_now - actual_fed_tax_now
-                current_marginal_rate = get_marginal_rate(taxable_gross_now, is_single) * 100.0
+            roth_match_annual = (p1_salary * p1_roth_401k_match)
+            if not is_single:
+                roth_match_annual += (p2_salary * p2_roth_401k_match)
 
-                if not df.empty:
-                    df_ret = df[df["Age"] >= retire_age]
-                    total_ret_fed_tax = df_ret["Fed Ordinary Tax"].sum()
-                    total_ret_gross_withdrawals = df_ret["Trad Withdrawals"].sum()
-                    ret_effective_rate = (
-                            total_ret_fed_tax / total_ret_gross_withdrawals * 100.0
-                    ) if total_ret_gross_withdrawals > 0 else 0.0
-                else:
-                    ret_effective_rate = 0.0
+            # Current federal taxes with existing Traditional contributions.
+            taxable_gross_now = max(0.0, gross_wage_total - current_pre_tax_deductions_now + roth_match_annual)
+            actual_fed_tax_now = calc_fed_tax(taxable_gross_now, 1.0, is_single)
 
-                arb_col1, arb_col2, arb_col3 = st.columns(3)
+            # Current-year federal tax savings from Traditional contributions.
+            base_fed_tax_now = calc_fed_tax(gross_wage_total + roth_match_annual, 1.0, is_single)
+            tax_savings_yr = base_fed_tax_now - actual_fed_tax_now
+            current_marginal_rate = get_marginal_rate(taxable_gross_now, is_single) * 100.0
 
-                with arb_col1:
-                    st.metric(
-                        "Current Federal Marginal Bracket",
-                        f"{current_marginal_rate:.1f}%",
-                        help="The tax rate applied to your top dollar of federal taxable income today. This is the approximate rate you save by making Traditional contributions."
-                    )
+            if not df.empty:
+                df_ret = df[df["Age"] >= retire_age]
+                total_ret_fed_tax = df_ret["Fed Ordinary Tax"].sum()
+                total_ret_gross_withdrawals = df_ret["Trad Withdrawals"].sum()
+                ret_effective_rate = (
+                        total_ret_fed_tax / total_ret_gross_withdrawals * 100.0
+                ) if total_ret_gross_withdrawals > 0 else 0.0
+            else:
+                ret_effective_rate = 0.0
 
-                with arb_col2:
-                    st.metric(
-                        "Upfront Federal Tax Savings",
-                        f"${tax_savings_yr:,.0f} / yr",
-                        help="Estimated annual federal income tax reduction from current Traditional contributions."
-                    )
+            arb_col1, arb_col2, arb_col3 = st.columns(3)
 
-                with arb_col3:
-                    st.metric(
-                        "Effective Retirement Tax Rate",
-                        f"{ret_effective_rate:.1f}%",
-                        help="Your blended federal tax rate during retirement based on projected Traditional withdrawals."
-                    )
+            with arb_col1:
+                st.metric(
+                    "Current Federal Marginal Bracket",
+                    f"{current_marginal_rate:.1f}%",
+                    help="The tax rate applied to your top dollar of federal taxable income today. This is the approximate rate you save by making Traditional contributions."
+                )
 
-                if current_marginal_rate > (ret_effective_rate + 2.0):
-                    st.success(
-                        f"**Tax Arbitrage Check:** You are currently avoiding taxes at **{current_marginal_rate:.1f}%**. "
-                        f"Your projected retirement tax rate is **{ret_effective_rate:.1f}%**. "
-                        f"*Verdict: Traditional contributions are highly efficient.*"
-                    )
-                elif current_marginal_rate < ret_effective_rate:
-                    st.error(
-                        f"⚠️ **Tax Torpedo Warning:** You are avoiding taxes at **{current_marginal_rate:.1f}%** today, "
-                        f"but projected retirement tax rate is **{ret_effective_rate:.1f}%**. "
-                        f"*Verdict: Roth contributions may be attractive.*"
-                    )
-                else:
-                    st.info(
-                        f"⚖️ **Tax Arbitrage Check:** Your current marginal rate and retirement effective rate are close. "
-                        f"Roth and Traditional are mathematically similar; consider Roth for future flexibility."
-                    )
+            with arb_col2:
+                st.metric(
+                    "Upfront Federal Tax Savings",
+                    f"${tax_savings_yr:,.0f} / yr",
+                    help="Estimated annual federal income tax reduction from current Traditional contributions."
+                )
 
-                st.markdown("<br>", unsafe_allow_html=True)
+            with arb_col3:
+                st.metric(
+                    "Effective Retirement Tax Rate",
+                    f"{ret_effective_rate:.1f}%",
+                    help="Your blended federal tax rate during retirement based on projected Traditional withdrawals."
+                )
 
-                show_roth_implications = st.checkbox("Show Impact of Switching to Roth", value=False)
-
-                if show_roth_implications:
-                    paycheck_frequency = st.selectbox(
-                        "Paycheck Frequency",
-                        ["Monthly (12/yr)", "Semi-Monthly (24/yr)", "Biweekly (26/yr)", "Weekly (52/yr)"],
-                        index=2,
-                        help="Used to translate annual tax differences into per-paycheck impact."
-                    )
-
-                    if paycheck_frequency == "Monthly (12/yr)":
-                        paychecks_per_year = 12
-                    elif paycheck_frequency == "Semi-Monthly (24/yr)":
-                        paychecks_per_year = 24
-                    elif paycheck_frequency == "Weekly (52/yr)":
-                        paychecks_per_year = 52
-                    else:
-                        paychecks_per_year = 26
-
-                    # Federal taxes if current employee Traditional contributions are redirected to Roth.
-                    roth_pivot_taxable_gross = max(0.0,
-                                                   taxable_gross_now + current_trad_401k_employee + current_trad_ira_annual)
-                    fed_tax_if_roth = calc_fed_tax(roth_pivot_taxable_gross, 1.0, is_single)
-
-                    fed_tax_increase_yr = fed_tax_if_roth - actual_fed_tax_now
-
-                    # State/local tax modeling.
-                    if state_choice == "Pennsylvania":
-                        current_state_taxable_wages = gross_wage_total
-                        roth_state_taxable_wages = gross_wage_total
-                        state_roth_note = "PA/local wage tax does not decrease for Traditional 401(k) contributions, so switching to Roth generally does not change PA/local withholding."
-                    else:
-                        current_state_taxable_wages = taxable_gross_now
-                        roth_state_taxable_wages = roth_pivot_taxable_gross
-                        state_roth_note = "For non-PA states, this model approximates state withholding by assuming Traditional contributions reduce state taxable wages."
-
-                    current_state_tax_now = current_state_taxable_wages * state_tax_decimal
-                    state_tax_if_roth = roth_state_taxable_wages * state_tax_decimal
-
-                    current_local_tax_now = gross_wage_total * local_tax_decimal
-                    local_tax_if_roth = gross_wage_total * local_tax_decimal
-
-                    current_state_local_tax_now = current_state_tax_now + current_local_tax_now
-                    state_local_tax_if_roth = state_tax_if_roth + local_tax_if_roth
-
-                    state_local_tax_increase_yr = state_local_tax_if_roth - current_state_local_tax_now
-                    total_tax_increase_yr = fed_tax_increase_yr + state_local_tax_increase_yr
-
-                    current_fed_per_paycheck = actual_fed_tax_now / paychecks_per_year
-                    roth_fed_per_paycheck = fed_tax_if_roth / paychecks_per_year
-                    fed_increase_per_paycheck = fed_tax_increase_yr / paychecks_per_year
-
-                    current_state_local_per_paycheck = current_state_local_tax_now / paychecks_per_year
-                    roth_state_local_per_paycheck = state_local_tax_if_roth / paychecks_per_year
-                    state_local_increase_per_paycheck = state_local_tax_increase_yr / paychecks_per_year
-
-                    total_increase_per_paycheck = total_tax_increase_yr / paychecks_per_year
-
-                    st.markdown("#### Paycheck Tax Impact If Traditional Contributions Move to Roth")
-
-                    pay_col1, pay_col2, pay_col3 = st.columns(3)
-
-                    with pay_col1:
-                        st.metric(
-                            "Current Fed Tax / Paycheck",
-                            f"${current_fed_per_paycheck:,.0f}",
-                            help="Estimated current federal income tax per paycheck after current Traditional contributions."
-                        )
-                        st.metric(
-                            "Fed Tax / Paycheck if Roth",
-                            f"${roth_fed_per_paycheck:,.0f}",
-                            delta=f"+${fed_increase_per_paycheck:,.0f}",
-                            delta_color="inverse",
-                            help="Estimated federal income tax per paycheck if current Traditional contributions are redirected to Roth."
-                        )
-
-                    with pay_col2:
-                        st.metric(
-                            "Current State/Local Tax / Paycheck",
-                            f"${current_state_local_per_paycheck:,.0f}",
-                            help="Estimated state plus local wage tax per paycheck."
-                        )
-                        st.metric(
-                            "State/Local Tax / Paycheck if Roth",
-                            f"${roth_state_local_per_paycheck:,.0f}",
-                            delta=f"+${state_local_increase_per_paycheck:,.0f}",
-                            delta_color="inverse",
-                            help=state_roth_note
-                        )
-
-                    with pay_col3:
-                        st.metric(
-                            "Total Added Tax / Paycheck",
-                            f"${total_increase_per_paycheck:,.0f}",
-                            help="Estimated combined federal plus state/local tax increase per paycheck if current Traditional contributions move to Roth."
-                        )
-
-                    st.caption(
-                        "This section estimates income-tax withholding impact only. It does not model Social Security tax, Medicare tax, employer payroll systems, tax credits, itemized deductions, HSA/FSA deductions, or paycheck-specific withholding elections."
-                    )
+            if current_marginal_rate > (ret_effective_rate + 2.0):
+                st.success(
+                    f"**Tax Arbitrage Check:** You are currently avoiding taxes at **{current_marginal_rate:.1f}%**. "
+                    f"Your projected retirement tax rate is **{ret_effective_rate:.1f}%**. "
+                    f"*Verdict: Traditional contributions are highly efficient.*"
+                )
+            elif current_marginal_rate < ret_effective_rate:
+                st.error(
+                    f"⚠️ **Tax Torpedo Warning:** You are avoiding taxes at **{current_marginal_rate:.1f}%** today, "
+                    f"but projected retirement tax rate is **{ret_effective_rate:.1f}%**. "
+                    f"*Verdict: Roth contributions may be attractive.*"
+                )
+            else:
+                st.info(
+                    f"⚖️ **Tax Arbitrage Check:** Your current marginal rate and retirement effective rate are close. "
+                    f"Roth and Traditional are mathematically similar; consider Roth for future flexibility."
+                )
 
             st.markdown("<br>", unsafe_allow_html=True)
+
 
             # SUBSECTION: PORTFOLIO MILESTONES & SOLVERS
             st.subheader("Portfolio Milestones & Solvers")
