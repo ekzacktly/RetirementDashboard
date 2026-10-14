@@ -416,6 +416,9 @@ def get_rmd_divisor(age: int) -> float:
     if age < 72:
         return 999.0
 
+    if age > 120:
+        return max(1.0, 2.0 - (0.1 * (age - 120)))
+
     return float(irs_table.get(age, 2.0))
 
 
@@ -1926,11 +1929,14 @@ if not getattr(sys, 'testing', False):
                                 return g - marginal_ord - penalty - state_tax
 
                             try:
-                                res = opt.root_scalar(
-                                    lambda g: yield_trad(g) - shortfall,
-                                    bracket=[shortfall, shortfall * 3.0]
-                                )
-                                take_trad = min(trad_bal_tot_start, float(res.root))
+                                if yield_trad(trad_bal_tot_start) >= shortfall:
+                                    res = opt.root_scalar(
+                                        lambda g: yield_trad(g) - shortfall,
+                                        bracket=[0.0, trad_bal_tot_start]
+                                    )
+                                    take_trad = float(res.root)
+                                else:
+                                    take_trad = trad_bal_tot_start
                             except ValueError:
                                 take_trad = min(trad_bal_tot_start, shortfall * 1.5)
 
@@ -2135,8 +2141,9 @@ if not getattr(sys, 'testing', False):
                         total_tax_living += trad_tax_fed * ratio_living
                         total_state_tax_retired += trad_tax_state
 
-                        ss_tax_isolated = calc_fed_tax(calc_taxable_ss(ss_yr, 0.0, is_single), inf_mult, is_single)
-                        net_ss_only = ss_yr - ss_tax_isolated
+                        taxable_ss_no_trad = calc_taxable_ss(ss_yr, 0.0, is_single)
+                        fed_tax_no_trad = calc_fed_tax(taxable_ss_no_trad, inf_mult, is_single)
+                        net_ss_only = ss_yr - fed_tax_no_trad
                         net_trad_yield = net_trad_and_ss - net_ss_only
 
                         if age < rmd_start_age:
@@ -2773,11 +2780,35 @@ if not getattr(sys, 'testing', False):
                 help="Projected value of all accounts at the exact retirement age."
             )
 
+            ret_row_data = df[df["Age"] == retire_age]
+            if not ret_row_data.empty:
+                r_trad = ret_row_data["Trad Ending"].iloc[0]
+                r_roth = ret_row_data["Roth Ending"].iloc[0]
+                r_brok = ret_row_data["Brok Ending"].iloc[0]
+            else:
+                r_trad = r_roth = r_brok = 0.0
+
+            st.caption(
+                f"**Retirement Breakdown:** Pre-Tax: \\${r_trad:,.0f} | Roth: \\${r_roth:,.0f} | Brokerage: \\${r_brok:,.0f}"
+            )
+
         with kpi3:
             st.metric(
                 f"Portfolio Balance at Age {target_lifespan}",
                 f"${end_of_life_balance:,.0f}",
                 help=f"Projected net worth across all accounts at your target lifespan age ({target_lifespan})."
+            )
+
+            eol_row_data = df[df["Age"] == target_lifespan]
+            if not eol_row_data.empty:
+                e_trad = eol_row_data["Trad Ending"].iloc[0]
+                e_roth = eol_row_data["Roth Ending"].iloc[0]
+                e_brok = eol_row_data["Brok Ending"].iloc[0]
+            else:
+                e_trad = e_roth = e_brok = 0.0
+
+            st.caption(
+                f"**End-of-Life Breakdown:** Pre-Tax: \\${e_trad:,.0f} | Roth: \\${e_roth:,.0f} | Brokerage: \\${e_brok:,.0f}"
             )
 
         st.markdown("##### Heavy Mathematics Solvers")
